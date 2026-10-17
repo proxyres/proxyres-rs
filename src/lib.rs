@@ -12,6 +12,7 @@ pub use error::Error;
 
 #[cfg(target_os = "macos")]
 mod cf;
+mod fetch;
 mod net_adapter;
 mod net_util;
 mod util;
@@ -19,3 +20,4 @@ mod util;
 mod util_linux;
 #[cfg(windows)]
 mod util_win;
+mod wpad;
