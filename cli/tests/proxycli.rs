@@ -11,11 +11,37 @@ fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).trim_end().to_string()
 }
 
+fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).to_string()
+}
+
 #[test]
-fn help() {
+fn usage_without_command() {
     let output = proxycli(&[]);
     assert!(!output.status.success());
-    assert!(stdout(&output).starts_with("proxycli"));
+    assert!(stderr(&output).contains("Usage: proxycli"));
+}
+
+#[test]
+fn help() {
+    let output = proxycli(&["--help"]);
+    assert!(output.status.success());
+    let out = stdout(&output);
+    for command in ["config", "execute", "resolve"] {
+        assert!(out.contains(command), "missing {command} in {out}");
+    }
+}
+
+#[test]
+fn invalid_config_option() {
+    let output = proxycli(&["config", "bogus"]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("auto_discover"));
+}
+
+#[test]
+fn resolve_requires_url() {
+    assert!(!proxycli(&["resolve"]).status.success());
 }
 
 #[test]
@@ -31,6 +57,13 @@ fn config() {
 #[test]
 fn config_auto_discover() {
     let output = proxycli(&["config", "auto_discover"]);
+    assert!(output.status.success());
+    assert!(["enabled", "disabled"].contains(&stdout(&output).as_str()));
+}
+
+#[test]
+fn config_verbose_after_command() {
+    let output = proxycli(&["config", "auto_discover", "--verbose"]);
     assert!(output.status.success());
     assert!(["enabled", "disabled"].contains(&stdout(&output).as_str()));
 }

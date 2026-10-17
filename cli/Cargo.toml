@@ -17,5 +17,6 @@ quickjs = ["proxyres/quickjs"]
 https = ["proxyres/https"]
 
 [dependencies]
+clap = { version = "4.6", features = ["derive"] }
 log = "0.4"
 proxyres = { path = ".." }
