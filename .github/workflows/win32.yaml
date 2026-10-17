@@ -1,0 +1,222 @@
+name: Build - Windows
+on: [workflow_dispatch, pull_request]
+env:
+  TERM: xterm-256color
+  CARGO_TERM_COLOR: always
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # QuickJS has no bindings for 32-bit MSVC so WinHTTP executes PAC scripts
+          - name: Build - Windows Win32
+            runs-on: windows-latest
+            target: i686-pc-windows-msvc
+            cargo-args: --target i686-pc-windows-msvc --no-default-features
+            binary-dir: target/i686-pc-windows-msvc/debug
+
+          - name: Build - Windows Win64
+            runs-on: windows-latest
+            codecov: windows
+
+          - name: Build - Windows GCC
+            runs-on: windows-latest
+            target: x86_64-pc-windows-gnu
+            cargo-args: --target x86_64-pc-windows-gnu
+            compiler: gcc
+            binary-dir: target/x86_64-pc-windows-gnu/debug
+
+          - name: Build - Windows (https)
+            runs-on: windows-latest
+            cargo-args: --features https
+            codecov: windows_https
+
+          - name: Build - Windows (capi)
+            runs-on: windows-latest
+            capi: true
+            binary-dir: target/debug/capi
+
+    steps:
+    - name: Install dependencies
+      run: choco install curl
+
+    - name: Install gcc dependencies
+      if: matrix.compiler == 'gcc'
+      run: |
+        # strawberryperl installs incompatible libraries so remove it
+        choco uninstall --no-progress strawberryperl
+
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+        components: llvm-tools-preview
+
+    - name: Build project
+      run: cargo build --workspace --all-targets ${{ matrix.cargo-args }}
+
+    # The C proxycli from the C library is built against the C API to check compatibility. It
+    # shares the C runtime heap with the library so strings returned by the library can be freed.
+    - name: Build C proxycli
+      if: matrix.capi
+      shell: bash
+      run: |
+        mkdir -p ${{ matrix.binary-dir }}
+        clang -fms-runtime-lib=dll -D _CRT_SECURE_NO_WARNINGS -D _CRT_NONSTDC_NO_DEPRECATE \
+          -D PROXYRES_EXECUTE -I capi/include capi/tests/proxycli.c target/debug/proxyres_capi.dll.lib \
+          -o ${{ matrix.binary-dir }}/proxycli.exe
+        cp target/debug/proxyres_capi.dll ${{ matrix.binary-dir }}/
+
+    - name: Run test http server
+      shell: bash
+      run: ./pac_server.sh
+      working-directory: tests
+
+    - name: Run tests
+      run: cargo test --workspace ${{ matrix.cargo-args }}
+
+    - name: Download pac from http server
+      run: curl -v http://127.0.0.1:8080/pac.js
+      working-directory: tests
+
+    - name: Dump proxy info
+      run: netsh winhttp show proxy
+
+    - name: Set proxy settings (IE)
+      run: |
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v AutoConfigURL /t REG_SZ /d "http://wpad/wpad2.dat" /f
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v AutoDetect /t REG_DWORD /d 1 /f
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 1 /f
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyServer /t REG_SZ /d "http=myproxy;https=sproxy:88" /f
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyOverride /t REG_SZ /d "*.foo.com;<local>" /f
+
+    - name: Check proxy settings (IE)
+      shell: bash
+      run: |
+        out=$(./proxycli config auto_discover)
+        echo "Auto discovery: $out"
+        if [ "$out" = "enabled" ]; then
+          echo "Auto discovery set successfully"
+        else
+          echo "Auto discovery set failed"
+          exit 1
+        fi
+        out=$(./proxycli config auto_config_url)
+        echo "Auto config url: $out"
+        if [ "$out" = "http://wpad/wpad2.dat" ]; then
+          echo "Auto config url set successfully"
+        else
+          echo "Auto config url set failed"
+          exit 1
+        fi
+        out=$(./proxycli config proxy http)
+        echo "Proxy (http): $out"
+        if [ "$out" = "myproxy" ]; then
+          echo "Proxy (http) set successfully"
+        else
+          echo "Proxy (http) set failed"
+          exit 1
+        fi
+        out=$(./proxycli config proxy https)
+        echo "Proxy (https): $out"
+        if [ "$out" = "sproxy:88" ]; then
+          echo "Proxy (https) set successfully"
+        else
+          echo "Proxy (https) set failed"
+          exit 1
+        fi
+        out=$(./proxycli config bypass_list)
+        echo "Proxy bypass: $out"
+        if [ "$out" = "*.foo.com,<local>" ]; then
+          echo "Proxy bypass set successfully"
+        else
+          echo "Proxy bypass set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+
+    - name: Turn off proxy settings (IE)
+      run: |
+        reg delete "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v AutoConfigURL /f
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f
+
+    - name: Set proxy auto config setting (IE)
+      run: |
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v AutoConfigURL /t REG_SZ /d "http://127.0.0.1:8080/pac.js" /f
+
+    - name: Check proxy resolution (IE)
+      shell: bash
+      run: |
+        out=$(./proxycli resolve https://google.com/)
+        echo "Proxy for https://google.com/: $out"
+        if [ "$out" = "direct://" ]; then
+          echo "Proxy for https://google.com/ set successfully"
+        else
+          echo "Proxy for https://google.com/ set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve https://simple.com/)
+        echo "Proxy for https://simple.com/: $out"
+        if [ "$out" = "http://no-such-proxy:80" ]; then
+          echo "Proxy for https://simple.com/ set successfully"
+        else
+          echo "Proxy for https://simple.com/ set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve https://multi.com/)
+        echo "Proxy for https://multi.com/: $out"
+        if [ "$out" = "https://some-such-proxy:443,https://any-such-proxy:41" ]; then
+          echo "Proxy for https://multi.com/ set successfully"
+        else
+          echo "Proxy for https://multi.com/ set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+
+    - name: Reset proxy settings (IE)
+      run: |
+        reg delete "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v AutoConfigURL /f
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f
+
+    - name: Install coverage tools
+      uses: taiki-e/install-action@cargo-llvm-cov
+      if: always() && matrix.codecov
+
+    - name: Generate coverage report
+      shell: bash
+      if: always() && matrix.codecov
+      run: |
+        cargo llvm-cov --workspace ${{ matrix.cargo-args }} \
+          --cobertura \
+          --output-path coverage.xml
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v7
+      if: always() && matrix.codecov && env.CODECOV_TOKEN != ''
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: ${{ matrix.codecov }}
+        name: ${{ matrix.name }}
+        verbose: false
+        fail_ci_if_error: true
+      env:
+        CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
+
+    - name: Upload build errors
+      uses: actions/upload-artifact@v7
+      if: failure()
+      with:
+        name: Build Errors - ${{ matrix.name }}
+        path: |
+          **/*.log
+        retention-days: 3

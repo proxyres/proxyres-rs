@@ -1,0 +1,224 @@
+name: Build - macOS
+on: [workflow_dispatch, pull_request]
+env:
+  TERM: xterm-256color
+  CARGO_TERM_COLOR: always
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Build - macOS
+            runs-on: macos-latest
+            codecov: macos
+
+          - name: Build - macOS (https)
+            runs-on: macos-latest
+            cargo-args: --features https
+            codecov: macos_https
+
+          - name: Build - macOS (capi)
+            runs-on: macos-latest
+            capi: true
+            binary-dir: target/debug/capi
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+
+    - name: Build project
+      run: cargo build --workspace --all-targets ${{ matrix.cargo-args }}
+
+    # The C proxycli from the C library is built against the C API to check compatibility
+    - name: Build C proxycli
+      if: matrix.capi
+      run: |
+        mkdir -p ${{ matrix.binary-dir }}
+        cc -D PROXYRES_EXECUTE -I capi/include capi/tests/proxycli.c \
+          -L target/debug -l proxyres_capi -Wl,-rpath,$PWD/target/debug \
+          -o ${{ matrix.binary-dir }}/proxycli
+
+    - name: Run test http server
+      run: ./pac_server.sh
+      working-directory: tests
+
+    - name: Run tests
+      run: cargo test --workspace ${{ matrix.cargo-args }}
+
+    - name: Download pac from http server
+      run: curl -v http://127.0.0.1:8080/pac.js
+      working-directory: tests
+
+    - name: Dump proxy info
+      run: scutil --proxy
+
+    - name: Dump network services
+      run: networksetup -listallnetworkservices
+
+    - name: Turn on proxy auto discovery (networksetup)
+      run: networksetup -setproxyautodiscovery Ethernet on
+
+    - name: Check proxy auto discovery setting (networksetup)
+      run: |
+        out=$(./proxycli config auto_discover)
+        echo "Auto discovery: $out"
+        if [ "$out" = "enabled" ]; then
+          echo "Auto discovery set successfully"
+        else
+          echo "Auto discovery set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+
+    - name: Turn off proxy auto discovery (networksetup)
+      run: networksetup -setproxyautodiscovery Ethernet off
+
+    - name: Set proxy auto config url setting (networksetup)
+      run: networksetup -setautoproxyurl Ethernet http://wpad/wpad3.dat
+
+    - name: Check proxy auto config url setting (networksetup)
+      run: |
+        out=$(./proxycli config auto_config_url)
+        echo "Auto config url: $out"
+        if [ "$out" = "http://wpad/wpad3.dat" ]; then
+          echo "Auto config url set successfully"
+        else
+          echo "Auto config url set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+
+    - name: Set manual proxy settings (networksetup)
+      run: |
+        networksetup -setwebproxy Ethernet my.proxy7.com 8007
+        networksetup -setsecurewebproxy Ethernet my.proxy8.com 8008
+        networksetup -setproxybypassdomains Ethernet hi.com world.com
+
+    - name: Check manual proxy settings (networksetup)
+      shell: bash
+      run: |
+        out=$(./proxycli config proxy http)
+        echo "Proxy (http): $out"
+        if [ "$out" = "my.proxy7.com:8007" ]; then
+          echo "Proxy (http) set successfully"
+        else
+          echo "Proxy (http) set failed"
+          exit 1
+        fi
+        out=$(./proxycli config proxy https)
+        echo "Proxy (https): $out"
+        if [ "$out" = "my.proxy8.com:8008" ]; then
+          echo "Proxy (https) set successfully"
+        else
+          echo "Proxy (https) set failed"
+          exit 1
+        fi
+        out=$(./proxycli config bypass_list)
+        echo "Proxy bypass: $out"
+        if [ "$out" = "hi.com,world.com" ]; then
+          echo "Proxy bypass set successfully"
+        else
+          echo "Proxy bypass set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+
+    - name: Set proxy auto config url setting (networksetup)
+      run: |
+        networksetup -setautoproxyurl Ethernet http://127.0.0.1:8080/pac.js
+        networksetup -setautoproxystate Ethernet on
+
+    - name: Check proxy resolution (networksetup)
+      shell: bash
+      run: |
+        out=$(./proxycli config auto_config_url)
+        echo "Auto config url: $out"
+        if [ "$out" = "http://127.0.0.1:8080/pac.js" ]; then
+          echo "Auto config url set successfully"
+        else
+          echo "Auto config url set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve https://google.com/)
+        echo "Proxy for https://google.com/: $out"
+        if [ "$out" = "direct://" ]; then
+          echo "Proxy for https://google.com/ set successfully"
+        else
+          echo "Proxy for https://google.com/ set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve http://simple.com/)
+        echo "Proxy for http://simple.com/: $out"
+        if [ "$out" = "http://no-such-proxy:80" ]; then
+          echo "Proxy for http://simple.com/ set successfully"
+        else
+          echo "Proxy for http://simple.com/ set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve https://simple.com/)
+        echo "Proxy for https://simple.com/: $out"
+        if [ "$out" = "http://no-such-proxy:80" ]; then
+          echo "Proxy for https://simple.com/ set successfully"
+        else
+          echo "Proxy for https://simple.com/ set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve https://multi-legacy.com/)
+        echo "Proxy for https://multi-legacy.com/: $out"
+        if [ "$out" = "http://some-such-proxy:443,http://any-such-proxy:41" ]; then
+          echo "Proxy for https://multi-legacy.com/ set successfully"
+        else
+          echo "Proxy for https://multi-legacy.com/ set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+
+    - name: Reset proxy settings (networksetup)
+      run: |
+        networksetup -setautoproxystate Ethernet off
+        networksetup -setwebproxystate Ethernet off
+        networksetup -setsecurewebproxystate Ethernet off
+
+    - name: Install coverage tools
+      uses: taiki-e/install-action@cargo-llvm-cov
+      if: always() && matrix.codecov
+
+    - name: Generate coverage report
+      if: always() && matrix.codecov
+      run: |
+        cargo llvm-cov --workspace ${{ matrix.cargo-args }} \
+          --cobertura \
+          --output-path coverage.xml
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v7
+      if: always() && matrix.codecov && env.CODECOV_TOKEN != ''
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: ${{ matrix.codecov }}
+        name: ${{ matrix.name }}
+        verbose: false
+        fail_ci_if_error: true
+      env:
+        CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
+
+    - name: Upload build errors
+      uses: actions/upload-artifact@v7
+      if: failure()
+      with:
+        name: Build Errors - ${{ matrix.name }}
+        path: |
+          **/*.log
+        retention-days: 3

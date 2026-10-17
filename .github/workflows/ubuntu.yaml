@@ -1,0 +1,281 @@
+name: Build - Ubuntu
+on: [workflow_dispatch, pull_request]
+env:
+  TERM: xterm-256color
+  CARGO_TERM_COLOR: always
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Build - Ubuntu 22
+            runs-on: ubuntu-22.04
+            packages: gsettings-desktop-schemas
+            codecov: ubuntu
+
+          - name: Build - Ubuntu
+            runs-on: ubuntu-latest
+            packages: gsettings-desktop-schemas
+            codecov: ubuntu
+
+          - name: Build - Ubuntu 26
+            runs-on: ubuntu-26.04
+            packages: gsettings-desktop-schemas
+            codecov: ubuntu
+
+          - name: Build - Ubuntu (https)
+            runs-on: ubuntu-latest
+            cargo-args: --features https
+            packages: gsettings-desktop-schemas
+            codecov: ubuntu_https
+
+          - name: Build - Ubuntu 26 (https)
+            runs-on: ubuntu-26.04
+            cargo-args: --features https
+            packages: gsettings-desktop-schemas
+            codecov: ubuntu_https
+
+          - name: Build - Ubuntu (capi)
+            runs-on: ubuntu-latest
+            packages: gsettings-desktop-schemas
+            capi: true
+            binary-dir: target/debug/capi
+
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y ${{ matrix.packages }}
+
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+
+    - name: Build project
+      run: cargo build --workspace --all-targets ${{ matrix.cargo-args }}
+
+    # The C proxycli from the C library is built against the C API to check compatibility
+    - name: Build C proxycli
+      if: matrix.capi
+      run: |
+        mkdir -p ${{ matrix.binary-dir }}
+        cc -D PROXYRES_EXECUTE -I capi/include capi/tests/proxycli.c \
+          -L target/debug -l proxyres_capi -Wl,-rpath,$PWD/target/debug \
+          -o ${{ matrix.binary-dir }}/proxycli
+
+    - name: Run test http server
+      run: ./pac_server.sh
+      working-directory: tests
+
+    - name: Run tests
+      run: cargo test --workspace ${{ matrix.cargo-args }}
+
+    - name: Download pac from http server
+      run: curl -v http://127.0.0.1:8080/pac.js
+      working-directory: tests
+
+    - name: Dump proxy info (gsettings)
+      run: |
+        gsettings get org.gnome.system.proxy autoconfig-url
+        gsettings get org.gnome.system.proxy mode
+        gsettings get org.gnome.system.proxy.http host
+        gsettings get org.gnome.system.proxy.http port
+        gsettings get org.gnome.system.proxy.https host
+        gsettings get org.gnome.system.proxy.https port
+        gsettings get org.gnome.system.proxy ignore-hosts
+
+    - name: Set auto proxy settings (gsettings)
+      run: |
+        gsettings set org.gnome.system.proxy autoconfig-url 'http://127.0.0.1:8080/pac.js'
+        gsettings set org.gnome.system.proxy mode 'auto'
+
+    - name: Check auto proxy settings (gsettings)
+      shell: bash
+      run: |
+        out=$(./proxycli config auto_discover)
+        echo "Auto discovery: $out"
+        if [ "$out" = "enabled" ]; then
+          echo "Auto discovery set successfully"
+        else
+          echo "Auto discovery set failed"
+          exit 1
+        fi
+        out=$(./proxycli config auto_config_url)
+        echo "Auto config url: $out"
+        if [ "$out" = "http://127.0.0.1:8080/pac.js" ]; then
+          echo "Auto config url set successfully"
+        else
+          echo "Auto config url set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+      env:
+        XDG_CURRENT_DESKTOP: GNOME
+
+    - name: Check auto proxy resolution (gsettings)
+      run: |
+        out=$(./proxycli resolve https://google.com/)
+        echo "Proxy for https://google.com/: $out"
+        if [ "$out" = "direct://" ]; then
+          echo "Proxy for https://google.com/ set successfully"
+        else
+          echo "Proxy for https://google.com/ set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve http://simple.com/)
+        echo "Proxy for http://simple.com/: $out"
+        if [ "$out" = "http://no-such-proxy:80" ]; then
+          echo "Proxy for http://simple.com/ set successfully"
+        else
+          echo "Proxy for http://simple.com/ set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve https://simple.com/)
+        echo "Proxy for https://simple.com/: $out"
+        if [ "$out" = "http://no-such-proxy:80" ]; then
+          echo "Proxy for https://simple.com/ set successfully"
+        else
+          echo "Proxy for https://simple.com/ set failed"
+          exit 1
+        fi
+        out=$(./proxycli resolve https://multi.com/)
+        echo "Proxy for https://multi.com/: $out"
+        if [ "$out" = "https://some-such-proxy:443,https://any-such-proxy:41" ]; then
+          echo "Proxy for https://multi.com/ set successfully"
+        else
+          echo "Proxy for https://multi.com/ set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+      env:
+        XDG_CURRENT_DESKTOP: GNOME
+
+    - name: Set manual proxy settings (gsettings)
+      run: |
+        gsettings set org.gnome.system.proxy mode 'manual'
+        gsettings set org.gnome.system.proxy.http host 'my.proxy1.com'
+        gsettings set org.gnome.system.proxy.http port 8001
+        gsettings set org.gnome.system.proxy.https host 'my.proxy2.com'
+        gsettings set org.gnome.system.proxy.https port 8002
+        gsettings set org.gnome.system.proxy ignore-hosts "['localhost', '127.0.0.0/8']"
+        gsettings set org.gnome.system.proxy use-same-proxy false
+
+    - name: Check manual proxy settings (gsettings)
+      shell: bash
+      run: |
+        out=$(./proxycli config proxy http)
+        echo "Proxy (http): $out"
+        if [ "$out" = "my.proxy1.com:8001" ]; then
+          echo "Proxy (http) set successfully"
+        else
+          echo "Proxy (http) set failed"
+          exit 1
+        fi
+        out=$(./proxycli config proxy https)
+        echo "Proxy (https): $out"
+        if [ "$out" = "my.proxy2.com:8002" ]; then
+          echo "Proxy (https) set successfully"
+        else
+          echo "Proxy (https) set failed"
+          exit 1
+        fi
+        out=$(./proxycli config bypass_list)
+        echo "Proxy bypass: $out"
+        if [ "$out" = "localhost,127.0.0.0/8" ]; then
+          echo "Proxy bypass set successfully"
+        else
+          echo "Proxy bypass set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+      env:
+        XDG_CURRENT_DESKTOP: GNOME
+
+    - name: Reset proxy settings (gsettings)
+      run: gsettings set org.gnome.system.proxy mode 'none'
+
+    # Run env tests after gsettings since environment variables are set for all
+    # subsequent steps.
+    - name: Set proxy settings (env)
+      run: |
+        echo "http_proxy=my.proxy3.com:8003" >> $GITHUB_ENV
+        echo "https_proxy=my.proxy4.com:8004" >> $GITHUB_ENV
+        echo "no_proxy=localhost,127.0.0.0/8" >> $GITHUB_ENV
+
+    - name: Check proxy settings (env)
+      shell: bash
+      run: |
+        out=$(./proxycli config proxy http)
+        echo "Proxy (http): $out"
+        if [ "$out" = "my.proxy3.com:8003" ]; then
+          echo "Proxy (http) set successfully"
+        else
+          echo "Proxy (http) set failed"
+          exit 1
+        fi
+        out=$(./proxycli config proxy https)
+        echo "Proxy (https): $out"
+        if [ "$out" = "my.proxy4.com:8004" ]; then
+          echo "Proxy (https) set successfully"
+        else
+          echo "Proxy (https) set failed"
+          exit 1
+        fi
+        out=$(./proxycli config bypass_list)
+        echo "Proxy bypass: $out"
+        if [ "$out" = "localhost,127.0.0.0/8" ]; then
+          echo "Proxy bypass set successfully"
+        else
+          echo "Proxy bypass set failed"
+          exit 1
+        fi
+      working-directory: ${{ matrix.binary-dir || 'target/debug' }}
+
+    - name: Reset proxy settings (env)
+      run: |
+        echo "http_proxy=" >> $GITHUB_ENV
+        echo "https_proxy=" >> $GITHUB_ENV
+        echo "no_proxy=" >> $GITHUB_ENV
+
+    - name: Install coverage tools
+      uses: taiki-e/install-action@cargo-llvm-cov
+      if: always() && matrix.codecov
+
+    - name: Generate coverage report
+      if: always() && matrix.codecov
+      run: |
+        cargo llvm-cov --workspace ${{ matrix.cargo-args }} \
+          --cobertura \
+          --output-path coverage.xml
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v7
+      if: always() && matrix.codecov && env.CODECOV_TOKEN != ''
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: ${{ matrix.codecov }}
+        name: ${{ matrix.name }}
+        verbose: false
+        fail_ci_if_error: true
+      env:
+        CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
+
+    - name: Upload build errors
+      uses: actions/upload-artifact@v7
+      if: failure()
+      with:
+        name: Build Errors - ${{ matrix.name }}
+        path: |
+          **/*.log
+        retention-days: 3
