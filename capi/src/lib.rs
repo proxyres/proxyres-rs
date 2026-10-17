@@ -5,6 +5,8 @@
 //! the next call on that instance or until it is deleted.
 
 use std::ffi::{CStr, CString, c_char, c_void};
+use std::sync::Once;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::time::Duration;
 
 use proxyres::resolver::Resolver;
@@ -62,11 +64,102 @@ fn error_code(error: &Error) -> i32 {
     }
 }
 
+// Log
+
+unsafe extern "C" {
+    // Calls a callback taking a format string and arguments with a formatted message
+    fn proxyres_capi_log(callback: *mut c_void, message: *const c_char);
+}
+
+static LOG_ERROR_CB: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static LOG_WARN_CB: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static LOG_INFO_CB: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static LOG_DEBUG_CB: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+struct CallbackLogger;
+
+impl log::Log for CallbackLogger {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= log::max_level()
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        let callback = match record.level() {
+            log::Level::Error => &LOG_ERROR_CB,
+            log::Level::Warn => &LOG_WARN_CB,
+            log::Level::Info => &LOG_INFO_CB,
+            log::Level::Debug | log::Level::Trace => &LOG_DEBUG_CB,
+        }
+        .load(Ordering::Acquire);
+        if callback.is_null() {
+            // Print errors and warnings like the C library does without a callback
+            if record.level() <= log::Level::Warn {
+                println!("{}", record.args());
+            }
+            return;
+        }
+        let message = to_c_string(&record.args().to_string());
+        // SAFETY: The callback was registered by the caller with the documented signature.
+        unsafe { proxyres_capi_log(callback, message.as_ptr()) };
+    }
+
+    fn flush(&self) {}
+}
+
+// Install the logger and only format messages that a callback or the default output receives
+fn update_logger() {
+    static LOGGER: CallbackLogger = CallbackLogger;
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        if log::set_logger(&LOGGER).is_err() {
+            eprintln!("proxyres: another logger is already installed, log callbacks are ignored");
+        }
+    });
+    let level = if !LOG_DEBUG_CB.load(Ordering::Acquire).is_null() {
+        log::LevelFilter::Debug
+    } else if !LOG_INFO_CB.load(Ordering::Acquire).is_null() {
+        log::LevelFilter::Info
+    } else {
+        log::LevelFilter::Warn
+    };
+    log::set_max_level(level);
+}
+
+fn set_log_callback(slot: &AtomicPtr<c_void>, callback: *mut c_void) {
+    slot.store(callback, Ordering::Release);
+    update_logger();
+}
+
+/// Set the print callback for error messages.
+#[unsafe(no_mangle)]
+pub extern "C" fn proxy_log_set_error_cb(callback: *mut c_void) {
+    set_log_callback(&LOG_ERROR_CB, callback);
+}
+
+/// Set the print callback for warning messages.
+#[unsafe(no_mangle)]
+pub extern "C" fn proxy_log_set_warn_cb(callback: *mut c_void) {
+    set_log_callback(&LOG_WARN_CB, callback);
+}
+
+/// Set the print callback for info messages.
+#[unsafe(no_mangle)]
+pub extern "C" fn proxy_log_set_info_cb(callback: *mut c_void) {
+    set_log_callback(&LOG_INFO_CB, callback);
+}
+
+/// Set the print callback for debug messages.
+#[unsafe(no_mangle)]
+pub extern "C" fn proxy_log_set_debug_cb(callback: *mut c_void) {
+    set_log_callback(&LOG_DEBUG_CB, callback);
+}
+
 // Library
 
 /// Initializes the proxy resolution library.
 #[unsafe(no_mangle)]
 pub extern "C" fn proxyres_global_init() -> bool {
+    update_logger();
     true
 }
 
@@ -146,6 +239,7 @@ pub unsafe extern "C" fn proxy_config_set_bypass_list_override(bypass_list: *con
 /// Initialization function for reading user's proxy configuration.
 #[unsafe(no_mangle)]
 pub extern "C" fn proxy_config_global_init() -> bool {
+    update_logger();
     true
 }
 
@@ -292,6 +386,7 @@ pub unsafe extern "C" fn proxy_resolver_delete(ctx: *mut *mut c_void) -> bool {
 /// Initialization function for proxy resolution.
 #[unsafe(no_mangle)]
 pub extern "C" fn proxy_resolver_global_init() -> bool {
+    update_logger();
     true
 }
 
@@ -401,6 +496,7 @@ pub unsafe extern "C" fn proxy_execute_delete(ctx: *mut *mut c_void) -> bool {
 /// Initialization function for PAC script execution.
 #[unsafe(no_mangle)]
 pub extern "C" fn proxy_execute_global_init() -> bool {
+    update_logger();
     execute::is_available()
 }
 
