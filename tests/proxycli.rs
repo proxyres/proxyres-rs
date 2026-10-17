@@ -35,9 +35,11 @@ fn config_auto_discover() {
     assert!(["enabled", "disabled"].contains(&stdout(&output).as_str()));
 }
 
-#[cfg(feature = "quickjs")]
 #[test]
 fn execute() {
+    if !proxyres::execute::is_available() {
+        return;
+    }
     let pac = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/pac.js");
     let output = proxycli(&[
         "execute",

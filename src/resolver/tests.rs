@@ -4,13 +4,10 @@ use std::time::Duration;
 use super::*;
 use crate::config::{set_auto_config_url_override, set_bypass_list_override, set_proxy_override, test_lock};
 
-// Scripts can be executed by the bundled engine or by the system resolver on Windows and macOS
-#[cfg(any(feature = "quickjs", windows, target_os = "macos"))]
 const PAC_SCRIPT: &str = include_str!("../../tests/pac.js");
 const WAIT_TIMEOUT: Option<Duration> = Some(Duration::from_secs(60));
 
 // Serve a PAC script on a local port for every connection and return its url
-#[cfg(any(feature = "quickjs", windows, target_os = "macos"))]
 fn serve_pac(script: &'static str) -> String {
     use std::io::{Read, Write};
 
@@ -41,6 +38,15 @@ fn serve_pac(script: &'static str) -> String {
         }
     });
     format!("http://127.0.0.1:{port}/pac.js")
+}
+
+// The built-in resolver needs a PAC script engine, which may not be installed
+fn has_engine() -> bool {
+    let available = crate::execute::is_available();
+    if !available {
+        eprintln!("skipping test without a PAC script engine");
+    }
+    available
 }
 
 // Reset all configuration overrides
@@ -104,9 +110,11 @@ fn manual_proxy_bypass() {
     reset_overrides();
 }
 
-#[cfg(feature = "quickjs")]
 #[test]
 fn builtin_pac_url() {
+    if !has_engine() {
+        return;
+    }
     let _lock = test_lock();
     reset_overrides();
     set_auto_config_url_override(Some(&serve_pac(PAC_SCRIPT)));
@@ -137,9 +145,12 @@ fn builtin_pac_url() {
     reset_overrides();
 }
 
-#[cfg(any(feature = "quickjs", windows, target_os = "macos"))]
 #[test]
 fn system_pac_url() {
+    // The system resolver is the built-in resolver on platforms other than Windows and macOS
+    if cfg!(not(any(windows, target_os = "macos"))) && !has_engine() {
+        return;
+    }
     let _lock = test_lock();
     reset_overrides();
     set_auto_config_url_override(Some(&serve_pac(PAC_SCRIPT)));
@@ -162,9 +173,11 @@ fn system_pac_url() {
     reset_overrides();
 }
 
-#[cfg(feature = "quickjs")]
 #[test]
 fn next_proxy() {
+    if !has_engine() {
+        return;
+    }
     let _lock = test_lock();
     reset_overrides();
     set_auto_config_url_override(Some(&serve_pac(PAC_SCRIPT)));
@@ -196,9 +209,11 @@ fn fetch_failure() {
     reset_overrides();
 }
 
-#[cfg(feature = "quickjs")]
 #[test]
 fn script_failure() {
+    if !has_engine() {
+        return;
+    }
     let _lock = test_lock();
     reset_overrides();
     set_auto_config_url_override(Some(&serve_pac("function FindProxyForURL(url, host) { throw 'x'; }")));

@@ -2,7 +2,6 @@ use std::ffi::{CStr, CString, c_char, c_void};
 
 use proxyres_capi::*;
 
-#[cfg(feature = "quickjs")]
 const PAC_SCRIPT: &str = include_str!("../../tests/pac.js");
 
 // Take ownership of a string allocated with malloc
@@ -102,10 +101,11 @@ fn null_instances() {
     }
 }
 
-#[cfg(feature = "quickjs")]
 #[test]
 fn execute() {
-    assert!(proxy_execute_global_init());
+    if !proxy_execute_global_init() {
+        return;
+    }
     let script = CString::new(PAC_SCRIPT).unwrap();
     unsafe {
         let mut execute = proxy_execute_create();
