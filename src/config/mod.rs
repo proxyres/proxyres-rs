@@ -11,13 +11,13 @@
 
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
-#[cfg(any(all(unix, not(target_os = "macos")), test))]
+#[cfg(any(all(unix, not(any(target_os = "macos", target_os = "ios"))), test))]
 mod env;
 #[cfg(target_os = "linux")]
 mod gnome3;
 #[cfg(target_os = "linux")]
 mod kde;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod macos;
 #[cfg(windows)]
 mod windows;
@@ -61,7 +61,7 @@ fn create_backend() -> Option<Box<dyn ConfigBackend>> {
     Some(Box::new(windows::WindowsConfig))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn create_backend() -> Option<Box<dyn ConfigBackend>> {
     Some(Box::new(macos::MacConfig))
 }
@@ -81,7 +81,7 @@ fn create_backend() -> Option<Box<dyn ConfigBackend>> {
     backend.or_else(|| Some(Box::new(env::EnvConfig)))
 }
 
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos", target_os = "ios"))))]
 fn create_backend() -> Option<Box<dyn ConfigBackend>> {
     Some(Box::new(env::EnvConfig))
 }

@@ -27,7 +27,7 @@ use crate::config;
 use crate::threadpool::POOL;
 use crate::util::{should_bypass_proxy, url_from_host, url_scheme};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod macos;
 mod posix;
 #[cfg(windows)]
@@ -85,12 +85,12 @@ fn backend(backend: Backend) -> Result<&'static dyn ResolverBackend, Error> {
                     .map(|resolver| resolver as &dyn ResolverBackend)
                     .ok_or(Error::NoResolver)
             }
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
             {
                 static MACOS: macos::MacResolver = macos::MacResolver;
                 Ok(&MACOS)
             }
-            #[cfg(not(any(windows, target_os = "macos")))]
+            #[cfg(not(any(windows, target_os = "macos", target_os = "ios")))]
             Ok(&POSIX)
         }
     }

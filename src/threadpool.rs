@@ -25,7 +25,7 @@ pub(crate) struct ThreadPool {
 /// Thread pool shared by all proxy resolvers.
 pub(crate) static POOL: ThreadPool = ThreadPool::new(MAX_THREADS);
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[link(name = "objc")]
 unsafe extern "C" {
     fn objc_autoreleasePoolPush() -> *mut std::ffi::c_void;
@@ -35,7 +35,7 @@ unsafe extern "C" {
 // Run a job, draining any autoreleased objects it creates
 fn run_job(job: Job) {
     // The implicit autorelease pool of a thread on macOS doesn't drain until the thread exits
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     // SAFETY: The pool is pushed and popped on the same thread.
     let pool = unsafe { objc_autoreleasePoolPush() };
 
@@ -43,7 +43,7 @@ fn run_job(job: Job) {
         log::error!("Thread pool job panicked");
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     // SAFETY: The pool was pushed above on this thread.
     unsafe {
         objc_autoreleasePoolPop(pool)

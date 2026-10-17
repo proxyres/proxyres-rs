@@ -20,7 +20,7 @@ use std::time::Duration;
 use crate::Error;
 use crate::util::{split_host_port, strip_ipv6_brackets, url_host};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod javascriptcore;
 #[cfg(target_os = "linux")]
 mod javascriptcore_gtk;
@@ -31,7 +31,13 @@ mod wsh;
 
 /// Mozilla's JavaScript helper functions for PAC scripts.
 #[cfg_attr(
-    not(any(feature = "quickjs", target_os = "linux", target_os = "macos", windows)),
+    not(any(
+        feature = "quickjs",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        windows
+    )),
     allow(dead_code)
 )]
 const PAC_UTILS: &str = include_str!("pac_utils.js");
@@ -42,7 +48,13 @@ const EXECUTE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Native helper functions exposed to PAC scripts.
 #[cfg_attr(
-    not(any(feature = "quickjs", target_os = "linux", target_os = "macos", windows)),
+    not(any(
+        feature = "quickjs",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        windows
+    )),
     allow(dead_code)
 )]
 mod natives {
@@ -108,7 +120,7 @@ impl Engine {
             Engine::QuickJs => cfg!(feature = "quickjs"),
             #[cfg(target_os = "linux")]
             Engine::JavaScriptCore => javascriptcore_gtk::is_available(),
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
             Engine::JavaScriptCore => javascriptcore::is_available(),
             #[cfg(windows)]
             Engine::WindowsScriptHost => wsh::is_available(),
@@ -142,7 +154,7 @@ fn execute(engine: Engine, script: &str, url: &str, timeout: Duration) -> Result
         Engine::QuickJs => quickjs::find_proxy_for_url(script, url, host, timeout),
         #[cfg(target_os = "linux")]
         Engine::JavaScriptCore => javascriptcore_gtk::find_proxy_for_url(script, url, host),
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         Engine::JavaScriptCore => javascriptcore::find_proxy_for_url(script, url, host),
         #[cfg(windows)]
         Engine::WindowsScriptHost => wsh::find_proxy_for_url(script, url, host),

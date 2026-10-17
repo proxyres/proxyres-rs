@@ -2,6 +2,7 @@
 
 use std::ffi::{CStr, c_char, c_void};
 
+#[cfg(target_os = "macos")]
 use core_foundation_sys::array::{CFArrayGetCount, CFArrayGetTypeID, CFArrayGetValueAtIndex, CFArrayRef};
 use core_foundation_sys::base::{CFGetTypeID, CFRelease, CFTypeRef};
 use core_foundation_sys::dictionary::{CFDictionaryGetValueIfPresent, CFDictionaryRef};
@@ -133,6 +134,7 @@ pub(crate) unsafe fn cf_dictionary_bool(dictionary: CFDictionaryRef, key: CFStri
 /// # Safety
 ///
 /// The dictionary and key must be valid.
+#[cfg(target_os = "macos")]
 pub(crate) unsafe fn cf_dictionary_strings(dictionary: CFDictionaryRef, key: CFStringRef) -> Vec<String> {
     // SAFETY: The caller guarantees the dictionary and key are valid.
     unsafe {

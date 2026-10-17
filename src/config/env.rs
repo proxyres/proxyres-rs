@@ -1,7 +1,7 @@
 //! Proxy configuration from environment variables.
 
 // Only used outside of tests on Linux and other Unix platforms
-#![cfg_attr(any(windows, target_os = "macos"), allow(dead_code))]
+#![cfg_attr(any(windows, target_os = "macos", target_os = "ios"), allow(dead_code))]
 
 use super::ConfigBackend;
 

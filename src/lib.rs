@@ -11,7 +11,7 @@ pub mod resolver;
 
 pub use error::Error;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod cf;
 mod fetch;
 mod net_adapter;

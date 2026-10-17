@@ -91,7 +91,7 @@ impl WpadCache {
 }
 
 /// Discovers the PAC url with WPAD and returns its script.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "macos", target_os = "ios")), allow(dead_code))]
 pub(super) fn discover_script(cancel: &Cancel) -> Result<Option<Arc<str>>, Error> {
     let mut cache = CACHE.lock().unwrap_or_else(PoisonError::into_inner);
     let Some(auto_config_url) = cache.discover() else {

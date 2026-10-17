@@ -148,7 +148,7 @@ fn builtin_pac_url() {
 #[test]
 fn system_pac_url() {
     // The system resolver is the built-in resolver on platforms other than Windows and macOS
-    if cfg!(not(any(windows, target_os = "macos"))) && !has_engine() {
+    if cfg!(not(any(windows, target_os = "macos", target_os = "ios"))) && !has_engine() {
         return;
     }
     let _lock = test_lock();
