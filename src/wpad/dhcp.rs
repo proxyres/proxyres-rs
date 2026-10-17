@@ -168,6 +168,38 @@ mod tests {
         reply
     }
 
+    type OptionCase<'a> = (&'a [u8], u8, Option<&'a [u8]>);
+
+    #[test]
+    fn find_option_cases() {
+        let wpad = DHCP_OPT_WPAD;
+        let tests: [OptionCase; 8] = [
+            (&[DHCP_OPT_MSGTYPE, 1, DHCP_ACK, DHCP_OPT_END], wpad, None),
+            (
+                &[DHCP_OPT_MSGTYPE, 1, DHCP_ACK, DHCP_OPT_END],
+                DHCP_OPT_MSGTYPE,
+                Some(&[DHCP_ACK]),
+            ),
+            // Padding before an option
+            (
+                &[DHCP_OPT_PAD, DHCP_OPT_PAD, wpad, 1, b'x', DHCP_OPT_END],
+                wpad,
+                Some(b"x"),
+            ),
+            // No end marker
+            (&[DHCP_OPT_MSGTYPE, 1, DHCP_ACK], wpad, None),
+            (&[DHCP_OPT_MSGTYPE, 1, DHCP_ACK], DHCP_OPT_MSGTYPE, Some(&[DHCP_ACK])),
+            // Truncated at the length or value
+            (&[wpad], wpad, None),
+            (&[wpad, 10, b'x'], wpad, None),
+            // Truncated option before the requested option
+            (&[DHCP_OPT_MSGTYPE, 200, DHCP_ACK, wpad, 1, b'x'], wpad, None),
+        ];
+        for (options, option_type, expected) in tests {
+            assert_eq!(find_option(options, option_type), expected, "options: {options:?}");
+        }
+    }
+
     #[test]
     fn inform_request() {
         let request = build_inform(0x12345678, &[0xaa; 6], Ipv4Addr::new(192, 168, 1, 5));
