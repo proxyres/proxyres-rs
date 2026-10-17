@@ -15,22 +15,36 @@
 //! assert_eq!(list, "PROXY no-such-proxy:80");
 //! ```
 
+use std::time::Duration;
+
 use crate::Error;
 use crate::util::{split_host_port, strip_ipv6_brackets, url_host};
 
+#[cfg(target_os = "macos")]
+mod javascriptcore;
+#[cfg(target_os = "linux")]
+mod javascriptcore_gtk;
 #[cfg(feature = "quickjs")]
 mod quickjs;
+#[cfg(windows)]
+mod wsh;
 
 /// Mozilla's JavaScript helper functions for PAC scripts.
-#[cfg_attr(not(feature = "quickjs"), allow(dead_code))]
+#[cfg_attr(
+    not(any(feature = "quickjs", target_os = "linux", target_os = "macos", windows)),
+    allow(dead_code)
+)]
 const PAC_UTILS: &str = include_str!("pac_utils.js");
 
-/// Maximum time a PAC script may run before it is interrupted.
+/// Maximum time a PAC script may run in engines that can interrupt it.
 #[cfg_attr(not(feature = "quickjs"), allow(dead_code))]
-const EXECUTE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const EXECUTE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Native helper functions exposed to PAC scripts.
-#[cfg_attr(not(feature = "quickjs"), allow(dead_code))]
+#[cfg_attr(
+    not(any(feature = "quickjs", target_os = "linux", target_os = "macos", windows)),
+    allow(dead_code)
+)]
 mod natives {
     use crate::net_util;
 
@@ -66,28 +80,80 @@ fn url_host_for_script(url: &str) -> &str {
     strip_ipv6_brackets(split_host_port(url_host(url)).0)
 }
 
-/// Whether a PAC script engine is available.
-pub fn is_available() -> bool {
-    cfg!(feature = "quickjs")
+/// PAC script engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Engine {
+    /// The bundled QuickJS engine, available with the `quickjs` feature.
+    QuickJs,
+    /// JavaScriptCore loaded at run-time, available on macOS and on Linux with JavaScriptCoreGTK
+    /// installed.
+    JavaScriptCore,
+    /// Windows Script Host using the JScript engine, available on Windows.
+    WindowsScriptHost,
 }
 
-/// Executes a PAC script's `FindProxyForURL` function for a url and returns its result.
-pub fn get_proxies_for_url(script: &str, url: &str) -> Result<String, Error> {
-    get_proxies_for_url_with_timeout(script, url, EXECUTE_TIMEOUT)
-}
+impl Engine {
+    /// Gets the engines available on this system in order of preference.
+    pub fn available() -> Vec<Engine> {
+        [Engine::QuickJs, Engine::JavaScriptCore, Engine::WindowsScriptHost]
+            .into_iter()
+            .filter(|engine| engine.is_available())
+            .collect()
+    }
 
-fn get_proxies_for_url_with_timeout(script: &str, url: &str, timeout: std::time::Duration) -> Result<String, Error> {
-    let host = url_host_for_script(url);
-    #[cfg(feature = "quickjs")]
-    return quickjs::find_proxy_for_url(script, url, host, timeout);
-    #[cfg(not(feature = "quickjs"))]
-    {
-        let _ = (script, host, timeout);
-        Err(Error::NoScriptEngine)
+    /// Whether the engine is available on this system.
+    pub fn is_available(self) -> bool {
+        match self {
+            Engine::QuickJs => cfg!(feature = "quickjs"),
+            #[cfg(target_os = "linux")]
+            Engine::JavaScriptCore => javascriptcore_gtk::is_available(),
+            #[cfg(target_os = "macos")]
+            Engine::JavaScriptCore => javascriptcore::is_available(),
+            #[cfg(windows)]
+            Engine::WindowsScriptHost => wsh::is_available(),
+            _ => false,
+        }
     }
 }
 
-#[cfg(all(test, feature = "quickjs"))]
+/// Whether a PAC script engine is available.
+pub fn is_available() -> bool {
+    !Engine::available().is_empty()
+}
+
+/// Executes a PAC script's `FindProxyForURL` function for a url and returns its result.
+///
+/// The first available engine is used, preferring the bundled engine over the system engines.
+pub fn get_proxies_for_url(script: &str, url: &str) -> Result<String, Error> {
+    let engine = Engine::available().into_iter().next().ok_or(Error::NoScriptEngine)?;
+    get_proxies_for_url_with(engine, script, url)
+}
+
+/// Executes a PAC script's `FindProxyForURL` function for a url using a specific engine.
+pub fn get_proxies_for_url_with(engine: Engine, script: &str, url: &str) -> Result<String, Error> {
+    execute(engine, script, url, EXECUTE_TIMEOUT)
+}
+
+fn execute(engine: Engine, script: &str, url: &str, timeout: Duration) -> Result<String, Error> {
+    let host = url_host_for_script(url);
+    match engine {
+        #[cfg(feature = "quickjs")]
+        Engine::QuickJs => quickjs::find_proxy_for_url(script, url, host, timeout),
+        #[cfg(target_os = "linux")]
+        Engine::JavaScriptCore => javascriptcore_gtk::find_proxy_for_url(script, url, host),
+        #[cfg(target_os = "macos")]
+        Engine::JavaScriptCore => javascriptcore::find_proxy_for_url(script, url, host),
+        #[cfg(windows)]
+        Engine::WindowsScriptHost => wsh::find_proxy_for_url(script, url, host),
+        _ => {
+            let _ = (script, host, timeout);
+            Err(Error::NoScriptEngine)
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::net_util::{my_ip_address, my_ip_address_ex};
@@ -135,6 +201,14 @@ function FindProxyForURL(url, host) {
   return "DIRECT";
 }"#;
 
+    // Engines to test, which always include the bundled engine when it is enabled
+    fn engines() -> Vec<Engine> {
+        let engines = Engine::available();
+        println!("engines: {engines:?}");
+        assert!(!cfg!(feature = "quickjs") || engines.contains(&Engine::QuickJs));
+        engines
+    }
+
     fn expected_my_ip() -> String {
         format!("PROXY {}:80", my_ip_address().unwrap_or_else(|| "127.0.0.1".into()))
     }
@@ -169,11 +243,13 @@ function FindProxyForURL(url, host) {
             // Unresolvable hosts resolve to null
             ("http://unresolvable.invalid/", Some("NULL".to_string())),
         ];
-        for (url, expected) in tests {
-            let list = get_proxies_for_url(SCRIPT, url);
-            assert!(list.is_ok(), "url: {url} error: {list:?}");
-            if let Some(expected) = expected {
-                assert_eq!(list.unwrap(), expected, "url: {url}");
+        for engine in engines() {
+            for (url, expected) in &tests {
+                let list = get_proxies_for_url_with(engine, SCRIPT, url);
+                assert!(list.is_ok(), "engine: {engine:?} url: {url} error: {list:?}");
+                if let Some(expected) = expected {
+                    assert_eq!(&list.unwrap(), expected, "engine: {engine:?} url: {url}");
+                }
             }
         }
     }
@@ -182,46 +258,72 @@ function FindProxyForURL(url, host) {
     fn url_with_quotes_is_not_evaluated() {
         let script = "function FindProxyForURL(url, host) { return url; }";
         let url = r#"http://a/");throw "injected";//"#;
-        assert_eq!(get_proxies_for_url(script, url).as_deref(), Ok(url));
+        for engine in engines() {
+            assert_eq!(
+                get_proxies_for_url_with(engine, script, url).as_deref(),
+                Ok(url),
+                "engine: {engine:?}"
+            );
+        }
     }
 
     #[test]
     fn syntax_error() {
-        let error = get_proxies_for_url("function FindProxyForURL(url, host) {", "http://a/").unwrap_err();
-        assert!(matches!(error, Error::Script(_)), "{error:?}");
+        for engine in engines() {
+            let result = get_proxies_for_url_with(engine, "function FindProxyForURL(url, host) {", "http://a/");
+            assert!(matches!(result, Err(Error::Script(_))), "engine: {engine:?} {result:?}");
+        }
     }
 
     #[test]
     fn missing_function() {
-        let error = get_proxies_for_url("var a = 1;", "http://a/").unwrap_err();
-        assert!(matches!(error, Error::Script(_)), "{error:?}");
+        for engine in engines() {
+            let result = get_proxies_for_url_with(engine, "var a = 1;", "http://a/");
+            assert!(matches!(result, Err(Error::Script(_))), "engine: {engine:?} {result:?}");
+        }
     }
 
     #[test]
     fn exception() {
         let script = "function FindProxyForURL(url, host) { throw new Error('boom'); }";
-        let error = get_proxies_for_url(script, "http://a/").unwrap_err();
-        assert!(
-            matches!(&error, Error::Script(message) if message.contains("boom")),
-            "{error:?}"
-        );
+        for engine in engines() {
+            let result = get_proxies_for_url_with(engine, script, "http://a/");
+            assert!(
+                matches!(&result, Err(Error::Script(message)) if message.contains("boom")),
+                "engine: {engine:?} {result:?}"
+            );
+        }
     }
 
     #[test]
     fn non_string_result() {
         let script = "function FindProxyForURL(url, host) { return undefined; }";
-        assert!(matches!(
-            get_proxies_for_url(script, "http://a/"),
-            Err(Error::Script(_))
-        ));
+        for engine in engines() {
+            let result = get_proxies_for_url_with(engine, script, "http://a/");
+            assert!(matches!(result, Err(Error::Script(_))), "engine: {engine:?} {result:?}");
+        }
     }
 
     #[test]
+    fn unavailable_engine() {
+        let unavailable = [Engine::QuickJs, Engine::JavaScriptCore, Engine::WindowsScriptHost]
+            .into_iter()
+            .filter(|engine| !engine.is_available());
+        for engine in unavailable {
+            assert_eq!(
+                get_proxies_for_url_with(engine, SCRIPT, "http://a/"),
+                Err(Error::NoScriptEngine)
+            );
+        }
+    }
+
+    #[cfg(feature = "quickjs")]
+    #[test]
     fn infinite_loop_is_interrupted() {
         let script = "function FindProxyForURL(url, host) { while (true) {} }";
-        let timeout = std::time::Duration::from_millis(500);
+        let timeout = Duration::from_millis(500);
         let start = std::time::Instant::now();
-        let result = get_proxies_for_url_with_timeout(script, "http://a/", timeout);
+        let result = execute(Engine::QuickJs, script, "http://a/", timeout);
         assert!(matches!(result, Err(Error::Script(_))), "{result:?}");
         assert!(start.elapsed() < timeout * 4);
     }

@@ -28,13 +28,21 @@ ureq = { version = "3", default-features = false, features = ["rustls", "platfor
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 libloading = "0.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation-sys = "0.8"
 
 [target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_Debug_ActiveScript",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+] }
+windows-core = "0.62"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_Dhcp",
