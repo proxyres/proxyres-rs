@@ -24,6 +24,11 @@ jobs:
             cargo-args: --features https
             codecov: macos_https
 
+          - name: Build - macOS (javascriptcore)
+            runs-on: macos-latest
+            cargo-args: --no-default-features
+            codecov: macos_javascriptcore
+
           - name: Build - macOS (capi)
             runs-on: macos-latest
             capi: true

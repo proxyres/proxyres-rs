@@ -17,34 +17,46 @@ jobs:
         include:
           - name: Build - Ubuntu 22
             runs-on: ubuntu-22.04
-            packages: gsettings-desktop-schemas
+            packages: libjavascriptcoregtk-4.1-dev gsettings-desktop-schemas
             codecov: ubuntu
 
           - name: Build - Ubuntu
             runs-on: ubuntu-latest
-            packages: gsettings-desktop-schemas
+            packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
             codecov: ubuntu
 
           - name: Build - Ubuntu 26
             runs-on: ubuntu-26.04
-            packages: gsettings-desktop-schemas
+            packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
             codecov: ubuntu
 
           - name: Build - Ubuntu (https)
             runs-on: ubuntu-latest
             cargo-args: --features https
-            packages: gsettings-desktop-schemas
+            packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
             codecov: ubuntu_https
 
           - name: Build - Ubuntu 26 (https)
             runs-on: ubuntu-26.04
             cargo-args: --features https
-            packages: gsettings-desktop-schemas
+            packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
             codecov: ubuntu_https
+
+          - name: Build - Ubuntu (javascriptcore)
+            runs-on: ubuntu-latest
+            cargo-args: --no-default-features
+            packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
+            codecov: ubuntu_javascriptcore
+
+          - name: Build - Ubuntu 26 (javascriptcore)
+            runs-on: ubuntu-26.04
+            cargo-args: --no-default-features
+            packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
+            codecov: ubuntu_javascriptcore
 
           - name: Build - Ubuntu (capi)
             runs-on: ubuntu-latest
-            packages: gsettings-desktop-schemas
+            packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
             capi: true
             binary-dir: target/debug/capi
 
