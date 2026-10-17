@@ -1,0 +1,21 @@
+[package]
+name = "proxyres-cli"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Command line utility for reading proxy configuration and resolving proxies with proxyres"
+repository = "https://github.com/proxyres/proxyres-rs"
+publish = false
+
+[[bin]]
+name = "proxycli"
+path = "src/main.rs"
+
+[features]
+quickjs = ["proxyres/quickjs"]
+https = ["proxyres/https"]
+
+[dependencies]
+log = "0.4"
+proxyres = { path = ".." }

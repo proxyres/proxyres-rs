@@ -12,7 +12,7 @@ categories = ["network-programming"]
 exclude = [".github/"]
 
 [workspace]
-members = ["capi"]
+members = ["capi", "cli"]
 
 [features]
 default = []

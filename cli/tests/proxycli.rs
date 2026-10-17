@@ -40,7 +40,7 @@ fn execute() {
     if !proxyres::execute::is_available() {
         return;
     }
-    let pac = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/pac.js");
+    let pac = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/pac.js");
     let output = proxycli(&[
         "execute",
         pac,
