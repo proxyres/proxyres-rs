@@ -70,16 +70,16 @@ jobs:
     - name: Build project
       run: cargo build --workspace --all-targets ${{ matrix.cargo-args }}
 
-    # The C proxycli from the C library is built against the C API to check compatibility. It
-    # shares the C runtime heap with the library so strings returned by the library can be freed.
+    # The C proxycli from the C library is built against the C API to check compatibility. It uses
+    # the dynamic C runtime so strings returned by the library can be freed.
     - name: Build C proxycli
       if: matrix.capi
       shell: bash
       run: |
         mkdir -p ${{ matrix.binary-dir }}
-        clang -fms-runtime-lib=dll -D _CRT_SECURE_NO_WARNINGS -D _CRT_NONSTDC_NO_DEPRECATE \
-          -D PROXYRES_EXECUTE -I capi/include capi/tests/proxycli.c target/debug/proxyres_capi.dll.lib \
-          -o ${{ matrix.binary-dir }}/proxycli.exe
+        clang-cl -MD -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -DPROXYRES_EXECUTE \
+          -Icapi/include capi/tests/proxycli.c target/debug/proxyres_capi.dll.lib \
+          -Fe${{ matrix.binary-dir }}/proxycli.exe
         cp target/debug/proxyres_capi.dll ${{ matrix.binary-dir }}/
 
     - name: Run test http server
