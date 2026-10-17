@@ -61,6 +61,16 @@ cargo run --bin proxycli -- resolve https://example.com/
 cargo run --bin proxycli -- execute tests/pac.js https://simple.com/
 ```
 
+## C API
+
+The [capi](capi) crate builds `proxyres_capi` as a static and a shared library implementing the headers of the C library, which are in [capi/include](capi/include). CI compiles the C library's [proxycli.c](capi/tests/proxycli.c) against it and runs the same checks as the Rust command line utility.
+
+```sh
+cargo build -p proxyres-capi --release
+```
+
+Strings returned as `char *` must be released with `free`, and strings returned as `const char *` are owned by the instance.
+
 ## Differences from the C library
 
 * Global initialization and cleanup are not needed.

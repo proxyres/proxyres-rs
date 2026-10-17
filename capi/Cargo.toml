@@ -1,0 +1,21 @@
+[package]
+name = "proxyres-capi"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "C API for proxyres compatible with the proxyres C library"
+repository = "https://github.com/proxyres/proxyres-rs"
+publish = false
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = ["quickjs"]
+quickjs = ["proxyres/quickjs"]
+https = ["proxyres/https"]
+
+[dependencies]
+libc = "0.2"
+proxyres = { path = "..", default-features = false }

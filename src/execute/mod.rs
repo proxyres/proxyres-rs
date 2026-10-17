@@ -66,6 +66,11 @@ fn url_host_for_script(url: &str) -> &str {
     strip_ipv6_brackets(split_host_port(url_host(url)).0)
 }
 
+/// Whether a PAC script engine is available.
+pub fn is_available() -> bool {
+    cfg!(feature = "quickjs")
+}
+
 /// Executes a PAC script's `FindProxyForURL` function for a url and returns its result.
 pub fn get_proxies_for_url(script: &str, url: &str) -> Result<String, Error> {
     get_proxies_for_url_with_timeout(script, url, EXECUTE_TIMEOUT)

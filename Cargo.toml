@@ -10,6 +10,9 @@ readme = "README.md"
 keywords = ["proxy", "pac", "wpad"]
 categories = ["network-programming"]
 
+[workspace]
+members = ["capi"]
+
 [features]
 default = ["quickjs"]
 # Execute PAC scripts with the bundled QuickJS engine
