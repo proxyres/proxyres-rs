@@ -5,6 +5,10 @@
 //! resolves the list of proxies to use for a given URL.
 
 pub mod config;
+mod error;
+pub mod execute;
+
+pub use error::Error;
 
 #[cfg(target_os = "macos")]
 mod cf;

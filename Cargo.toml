@@ -10,8 +10,14 @@ readme = "README.md"
 keywords = ["proxy", "pac", "wpad"]
 categories = ["network-programming"]
 
+[features]
+default = ["quickjs"]
+# Execute PAC scripts with the bundled QuickJS engine
+quickjs = ["dep:rquickjs"]
+
 [dependencies]
 log = "0.4"
+rquickjs = { version = "0.14", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
