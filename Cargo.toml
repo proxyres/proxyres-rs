@@ -1,0 +1,14 @@
+[package]
+name = "proxyres"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Cross-platform proxy resolution"
+repository = "https://github.com/proxyres/proxyres-rs"
+readme = "README.md"
+keywords = ["proxy", "pac", "wpad"]
+categories = ["network-programming"]
+
+[dependencies]
+log = "0.4"
