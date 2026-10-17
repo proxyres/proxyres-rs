@@ -16,6 +16,7 @@ jobs:
           components: rustfmt, clippy
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo clippy --all-targets --no-default-features -- -D warnings
 
   test:
     name: Test - ${{ matrix.os }}
@@ -24,10 +25,141 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+
+      - name: Install dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y gsettings-desktop-schemas
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      - name: Build proxycli
+        run: |
+          cargo build --bin proxycli
+          echo "PROXYCLI=$GITHUB_WORKSPACE/target/debug/proxycli" >> $GITHUB_ENV
+
+      # Linux
+
+      - name: Check auto proxy settings (gsettings)
+        if: runner.os == 'Linux'
+        env:
+          XDG_CURRENT_DESKTOP: GNOME
+        run: |
+          gsettings set org.gnome.system.proxy autoconfig-url 'http://127.0.0.1:8080/pac.js'
+          gsettings set org.gnome.system.proxy mode 'auto'
+          .github/scripts/expect.sh "enabled" config auto_discover
+          .github/scripts/expect.sh "http://127.0.0.1:8080/pac.js" config auto_config_url
+
+      - name: Check auto proxy resolution (gsettings)
+        if: runner.os == 'Linux'
+        env:
+          XDG_CURRENT_DESKTOP: GNOME
+        run: |
+          .github/scripts/serve.sh
+          .github/scripts/expect.sh "direct://" resolve https://google.com/
+          .github/scripts/expect.sh "http://no-such-proxy:80" resolve http://simple.com/
+          .github/scripts/expect.sh "http://no-such-proxy:80" resolve https://simple.com/
+          .github/scripts/expect.sh "https://some-such-proxy:443,https://any-such-proxy:41" resolve https://multi.com/
+
+      - name: Check manual proxy settings (gsettings)
+        if: runner.os == 'Linux'
+        env:
+          XDG_CURRENT_DESKTOP: GNOME
+        run: |
+          gsettings set org.gnome.system.proxy mode 'manual'
+          gsettings set org.gnome.system.proxy.http host 'my.proxy1.com'
+          gsettings set org.gnome.system.proxy.http port 8001
+          gsettings set org.gnome.system.proxy.https host 'my.proxy2.com'
+          gsettings set org.gnome.system.proxy.https port 8002
+          gsettings set org.gnome.system.proxy ignore-hosts "['localhost', '127.0.0.0/8']"
+          gsettings set org.gnome.system.proxy use-same-proxy false
+          .github/scripts/expect.sh "my.proxy1.com:8001" config proxy http
+          .github/scripts/expect.sh "my.proxy2.com:8002" config proxy https
+          .github/scripts/expect.sh "localhost,127.0.0.0/8" config bypass_list
+          .github/scripts/expect.sh "http://my.proxy2.com:8002" resolve https://example.com/
+          .github/scripts/expect.sh "direct://" resolve http://127.0.0.2/
+          gsettings set org.gnome.system.proxy mode 'none'
+
+      - name: Check proxy settings (env)
+        if: runner.os == 'Linux'
+        env:
+          http_proxy: my.proxy3.com:8003
+          https_proxy: my.proxy4.com:8004
+          no_proxy: localhost,127.0.0.0/8
+        run: |
+          .github/scripts/expect.sh "my.proxy3.com:8003" config proxy http
+          .github/scripts/expect.sh "my.proxy4.com:8004" config proxy https
+          .github/scripts/expect.sh "localhost,127.0.0.0/8" config bypass_list
+
+      # Windows
+
+      - name: Check proxy settings (registry)
+        if: runner.os == 'Windows'
+        env:
+          # Keep Git Bash from converting reg arguments into paths
+          MSYS_NO_PATHCONV: 1
+        run: |
+          key='HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+          reg add "$key" /v AutoConfigURL /t REG_SZ /d "http://wpad/wpad2.dat" /f
+          reg add "$key" /v AutoDetect /t REG_DWORD /d 1 /f
+          reg add "$key" /v ProxyEnable /t REG_DWORD /d 1 /f
+          reg add "$key" /v ProxyServer /t REG_SZ /d "http=myproxy;https=sproxy:88" /f
+          reg add "$key" /v ProxyOverride /t REG_SZ /d "*.foo.com;<local>" /f
+          .github/scripts/expect.sh "enabled" config auto_discover
+          .github/scripts/expect.sh "http://wpad/wpad2.dat" config auto_config_url
+          .github/scripts/expect.sh "myproxy" config proxy http
+          .github/scripts/expect.sh "sproxy:88" config proxy https
+          .github/scripts/expect.sh "*.foo.com,<local>" config bypass_list
+          reg add "$key" /v ProxyEnable /t REG_DWORD /d 0 /f
+          reg add "$key" /v AutoConfigURL /t REG_SZ /d "http://127.0.0.1:8080/pac.js" /f
+
+      - name: Check proxy resolution (registry)
+        if: runner.os == 'Windows'
+        run: |
+          .github/scripts/serve.sh
+          .github/scripts/expect.sh "direct://" resolve https://google.com/
+          .github/scripts/expect.sh "http://no-such-proxy:80" resolve https://simple.com/
+          .github/scripts/expect.sh "https://some-such-proxy:443,https://any-such-proxy:41" resolve https://multi.com/
+
+      # macOS
+
+      - name: Check proxy settings (networksetup)
+        if: runner.os == 'macOS'
+        run: |
+          networksetup -setproxyautodiscovery Ethernet on
+          .github/scripts/expect.sh "enabled" config auto_discover
+          networksetup -setproxyautodiscovery Ethernet off
+          networksetup -setautoproxyurl Ethernet http://wpad/wpad3.dat
+          .github/scripts/expect.sh "http://wpad/wpad3.dat" config auto_config_url
+          networksetup -setwebproxy Ethernet my.proxy7.com 8007
+          networksetup -setsecurewebproxy Ethernet my.proxy8.com 8008
+          networksetup -setproxybypassdomains Ethernet hi.com world.com
+          .github/scripts/expect.sh "my.proxy7.com:8007" config proxy http
+          .github/scripts/expect.sh "my.proxy8.com:8008" config proxy https
+          .github/scripts/expect.sh "hi.com,world.com" config bypass_list
+          networksetup -setwebproxystate Ethernet off
+          networksetup -setsecurewebproxystate Ethernet off
+
+      - name: Check proxy resolution (networksetup)
+        if: runner.os == 'macOS'
+        run: |
+          .github/scripts/serve.sh
+          networksetup -setautoproxyurl Ethernet http://127.0.0.1:8080/pac.js
+          networksetup -setautoproxystate Ethernet on
+          .github/scripts/expect.sh "http://127.0.0.1:8080/pac.js" config auto_config_url
+          .github/scripts/expect.sh "direct://" resolve https://google.com/
+          .github/scripts/expect.sh "http://no-such-proxy:80" resolve http://simple.com/
+          .github/scripts/expect.sh "http://no-such-proxy:80" resolve https://simple.com/
+          .github/scripts/expect.sh "http://some-such-proxy:443,http://any-such-proxy:41" resolve https://multi-legacy.com/
+          networksetup -setautoproxystate Ethernet off
