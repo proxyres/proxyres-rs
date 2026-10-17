@@ -1,0 +1,54 @@
+name: Build - iOS
+on: [workflow_dispatch, pull_request]
+env:
+  TERM: xterm-256color
+  CARGO_TERM_COLOR: always
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Build - iOS Simulator
+            runs-on: macos-latest
+            target: aarch64-apple-ios-sim
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Build project
+      run: cargo build --workspace --all-targets --target ${{ matrix.target }}
+
+    - name: Boot simulator
+      run: |
+        udid=$(xcrun simctl list devices available --json | jq -r \
+          '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))][0].udid')
+        echo "Booting simulator $udid"
+        xcrun simctl bootstatus "$udid" -b
+
+    # Tests run inside the booted simulator through the target runner
+    - name: Run tests
+      run: cargo test --workspace --target ${{ matrix.target }}
+      env:
+        CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER: xcrun simctl spawn booted
+
+    - name: Upload build errors
+      uses: actions/upload-artifact@v7
+      if: failure()
+      with:
+        name: Build Errors - ${{ matrix.name }}
+        path: |
+          **/*.log
+        retention-days: 3
