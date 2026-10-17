@@ -9,7 +9,7 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::time::Duration;
 
-use proxyres::resolver::Resolver;
+use proxyres::resolver::{Backend, Resolver};
 use proxyres::{Error, config, execute};
 
 /// Copies a string into memory allocated with `malloc` so the caller can release it with `free`.
@@ -160,6 +160,8 @@ pub extern "C" fn proxy_log_set_debug_cb(callback: *mut c_void) {
 #[unsafe(no_mangle)]
 pub extern "C" fn proxyres_global_init() -> bool {
     update_logger();
+    // Start WPAD discovery immediately like the C library
+    Backend::System.prefetch();
     true
 }
 
@@ -387,6 +389,8 @@ pub unsafe extern "C" fn proxy_resolver_delete(ctx: *mut *mut c_void) -> bool {
 #[unsafe(no_mangle)]
 pub extern "C" fn proxy_resolver_global_init() -> bool {
     update_logger();
+    // Start WPAD discovery immediately like the C library
+    Backend::System.prefetch();
     true
 }
 
