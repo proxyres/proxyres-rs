@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use super::{Cancel, ResolverBackend};
 use crate::fetch::fetch_get;
+use crate::threadpool::POOL;
 use crate::util::convert_proxy_list_to_uri_list;
 use crate::wpad::{wpad_dhcp, wpad_dns};
 use crate::{Error, config, execute};
@@ -91,7 +92,6 @@ impl WpadCache {
 }
 
 /// Discovers the PAC url with WPAD and returns its script.
-#[cfg_attr(not(any(target_os = "macos", target_os = "ios")), allow(dead_code))]
 pub(super) fn discover_script(cancel: &Cancel) -> Result<Option<Arc<str>>, Error> {
     let mut cache = CACHE.lock().unwrap_or_else(PoisonError::into_inner);
     let Some(auto_config_url) = cache.discover() else {
@@ -101,6 +101,19 @@ pub(super) fn discover_script(cancel: &Cancel) -> Result<Option<Arc<str>>, Error
         return Err(Error::Cancelled);
     }
     cache.script(&auto_config_url).map(Some)
+}
+
+/// Starts discovering the PAC script with WPAD on the thread pool if auto-discovery is enabled.
+pub(super) fn prefetch() {
+    if !config::auto_discover() {
+        return;
+    }
+    POOL.enqueue(|| {
+        // Resolutions started in the meantime wait for the cache lock and reuse the result
+        if let Err(error) = discover_script(&Cancel::default()) {
+            log::debug!("Unable to prefetch proxy auto config script ({error})");
+        }
+    });
 }
 
 pub(super) struct PosixResolver;

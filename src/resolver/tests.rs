@@ -242,3 +242,11 @@ fn resolve_blocking() {
     );
     reset_overrides();
 }
+
+#[test]
+fn prefetch_does_not_block() {
+    let start = std::time::Instant::now();
+    Backend::System.prefetch();
+    Backend::Builtin.prefetch();
+    assert!(start.elapsed() < Duration::from_secs(1));
+}

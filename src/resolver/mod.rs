@@ -36,13 +36,37 @@ mod winhttp;
 /// Proxy resolution implementation.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Backend {
-    /// The operating system's proxy resolver: WinHTTP on Windows, CFNetwork on macOS, and the
-    /// built-in resolver elsewhere.
+    /// The operating system's proxy resolver: WinHTTP on Windows, CFNetwork on macOS and iOS, and
+    /// the built-in resolver elsewhere.
     #[default]
     System,
     /// The built-in resolver, which discovers PAC scripts with WPAD using DHCP and DNS and
-    /// evaluates them with the bundled script engine.
+    /// evaluates them with the available script engine.
     Builtin,
+}
+
+impl Backend {
+    /// Starts discovering the proxy auto-config (PAC) script with WPAD in the background.
+    ///
+    /// Call this at startup so the first resolution does not wait for discovery, which can take
+    /// several seconds. It does nothing when auto-discovery is disabled or when the backend
+    /// discovers scripts itself, as WinHTTP does on Windows.
+    pub fn prefetch(self) {
+        match self {
+            Backend::Builtin => posix::prefetch(),
+            #[cfg(windows)]
+            Backend::System => {}
+            // CFNetwork only needs WPAD discovery when no PAC url is configured
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            Backend::System => {
+                if config::auto_config_url().is_none() {
+                    posix::prefetch();
+                }
+            }
+            #[cfg(not(any(windows, target_os = "macos", target_os = "ios")))]
+            Backend::System => posix::prefetch(),
+        }
+    }
 }
 
 /// Cancellation flag shared with a running resolution.
