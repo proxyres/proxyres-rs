@@ -1,6 +1,6 @@
 # proxyres
 
-Cross-platform proxy resolution for Rust, ported from the C library [proxyres](https://github.com/nmoinvaz/proxyres).
+Cross-platform proxy resolution for Rust, ported from the C library [proxyres](https://github.com/proxyres/proxyres).
 
 The port is a work in progress. The API may change before the first release.
 
