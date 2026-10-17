@@ -16,6 +16,8 @@ pub enum Error {
     Os(i32),
     /// The operation was cancelled.
     Cancelled,
+    /// The operation did not complete in time.
+    Timeout,
 }
 
 impl fmt::Display for Error {
@@ -27,6 +29,7 @@ impl fmt::Display for Error {
             Error::Fetch(message) => write!(f, "unable to fetch PAC script: {message}"),
             Error::Os(code) => write!(f, "system error {code}"),
             Error::Cancelled => write!(f, "operation cancelled"),
+            Error::Timeout => write!(f, "operation timed out"),
         }
     }
 }

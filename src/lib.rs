@@ -7,6 +7,7 @@
 pub mod config;
 mod error;
 pub mod execute;
+pub mod resolver;
 
 pub use error::Error;
 
@@ -15,6 +16,7 @@ mod cf;
 mod fetch;
 mod net_adapter;
 mod net_util;
+mod threadpool;
 mod util;
 #[cfg(any(target_os = "linux", test))]
 mod util_linux;
