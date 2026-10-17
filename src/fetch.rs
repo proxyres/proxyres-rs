@@ -55,8 +55,47 @@ fn connect(host: &str, port: u16) -> std::io::Result<TcpStream> {
     Err(last_error)
 }
 
-/// Downloads a PAC script using HTTP 1.0.
+/// Downloads a PAC script.
 pub(crate) fn fetch_get(url: &str) -> Result<String, Error> {
+    #[cfg(feature = "https")]
+    return fetch_ureq(url);
+    #[cfg(not(feature = "https"))]
+    fetch_http(url)
+}
+
+/// Downloads a PAC script using HTTP or HTTPS, following redirects.
+#[cfg(feature = "https")]
+fn fetch_ureq(url: &str) -> Result<String, Error> {
+    use ureq::tls::{RootCerts, TlsConfig};
+
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        // Never download the PAC script through a proxy
+        .proxy(None)
+        .timeout_connect(Some(CONNECT_TIMEOUT))
+        .timeout_global(Some(CONNECT_TIMEOUT + IO_TIMEOUT))
+        .tls_config(TlsConfig::builder().root_certs(RootCerts::PlatformVerifier).build())
+        .build()
+        .into();
+    let mut response = agent
+        .get(url)
+        .header("Accept", "application/x-ns-proxy-autoconfig")
+        .call()
+        .map_err(|error| fetch_error(url, error))?;
+    let body = response
+        .body_mut()
+        .with_config()
+        .limit(SCRIPT_MAX as u64)
+        .read_to_vec()
+        .map_err(|error| fetch_error(url, error))?;
+    if body.is_empty() {
+        return Err(fetch_error(url, "empty script"));
+    }
+    Ok(String::from_utf8_lossy(&body).into_owned())
+}
+
+/// Downloads a PAC script using HTTP 1.0.
+#[cfg_attr(feature = "https", allow(dead_code))]
+fn fetch_http(url: &str) -> Result<String, Error> {
     if !url_scheme(url).unwrap_or("http").eq_ignore_ascii_case("http") {
         return Err(fetch_error(url, "only http is supported"));
     }
@@ -166,51 +205,51 @@ pub(crate) mod tests {
     fn get() {
         let body = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
         let url = serve_once(response("200 OK", &format!("Content-Length: {}\r\n", body.len()), body));
-        assert_eq!(fetch_get(&url).as_deref(), Ok(body));
+        assert_eq!(fetch_http(&url).as_deref(), Ok(body));
     }
 
     #[test]
     fn get_without_content_length() {
         let body = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
         let url = serve_once(response("200 OK", "", body));
-        assert_eq!(fetch_get(&url).as_deref(), Ok(body));
+        assert_eq!(fetch_http(&url).as_deref(), Ok(body));
     }
 
     #[test]
     fn get_large_body() {
         let body = "x".repeat(100 * 1024);
         let url = serve_once(response("200 OK", &format!("content-length:{}\r\n", body.len()), &body));
-        assert_eq!(fetch_get(&url).map(|script| script.len()), Ok(body.len()));
+        assert_eq!(fetch_http(&url).map(|script| script.len()), Ok(body.len()));
     }
 
     #[test]
     fn body_longer_than_content_length() {
         let url = serve_once(response("200 OK", "Content-Length: 4\r\n", &"function".repeat(100)));
-        assert_eq!(fetch_get(&url).as_deref(), Ok("func"));
+        assert_eq!(fetch_http(&url).as_deref(), Ok("func"));
     }
 
     #[test]
     fn body_shorter_than_content_length() {
         let url = serve_once(response("200 OK", "Content-Length: 100\r\n", "function"));
-        assert!(matches!(fetch_get(&url), Err(Error::Fetch(_))));
+        assert!(matches!(fetch_http(&url), Err(Error::Fetch(_))));
     }
 
     #[test]
     fn not_found() {
         let url = serve_once(response("404 Not Found", "Content-Length: 9\r\n", "not found"));
-        assert!(matches!(fetch_get(&url), Err(Error::Fetch(message)) if message.contains("404")));
+        assert!(matches!(fetch_http(&url), Err(Error::Fetch(message)) if message.contains("404")));
     }
 
     #[test]
     fn too_large() {
         let body = "x".repeat(SCRIPT_MAX + 1);
         let url = serve_once(response("200 OK", "", &body));
-        assert!(matches!(fetch_get(&url), Err(Error::Fetch(_))));
+        assert!(matches!(fetch_http(&url), Err(Error::Fetch(_))));
     }
 
     #[test]
     fn https_not_supported() {
-        assert!(matches!(fetch_get("https://127.0.0.1/wpad.dat"), Err(Error::Fetch(_))));
+        assert!(matches!(fetch_http("https://127.0.0.1/wpad.dat"), Err(Error::Fetch(_))));
     }
 
     #[test]
@@ -218,8 +257,39 @@ pub(crate) mod tests {
         // Bind and drop a listener to find a port that is not listening
         let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
         assert!(matches!(
-            fetch_get(&format!("http://127.0.0.1:{port}/")),
+            fetch_http(&format!("http://127.0.0.1:{port}/")),
             Err(Error::Fetch(_))
         ));
+    }
+
+    #[cfg(feature = "https")]
+    mod https {
+        use super::*;
+
+        #[test]
+        fn get() {
+            let body = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
+            let url = serve_once(response("200 OK", &format!("Content-Length: {}\r\n", body.len()), body));
+            assert_eq!(fetch_get(&url).as_deref(), Ok(body));
+        }
+
+        #[test]
+        fn not_found() {
+            let url = serve_once(response("404 Not Found", "Content-Length: 9\r\n", "not found"));
+            assert!(matches!(fetch_get(&url), Err(Error::Fetch(message)) if message.contains("404")));
+        }
+
+        #[test]
+        fn too_large() {
+            let body = "x".repeat(SCRIPT_MAX + 1);
+            let url = serve_once(response("200 OK", "", &body));
+            assert!(matches!(fetch_get(&url), Err(Error::Fetch(_))));
+        }
+
+        #[test]
+        fn get_https() {
+            let body = fetch_get("https://example.com/").expect("unable to fetch https url");
+            assert!(body.contains("Example Domain"));
+        }
     }
 }

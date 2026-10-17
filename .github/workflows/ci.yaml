@@ -17,6 +17,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo clippy --all-targets --no-default-features -- -D warnings
+      - run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
     name: Test - ${{ matrix.os }}
@@ -43,6 +44,9 @@ jobs:
 
       - name: Test
         run: cargo test
+
+      - name: Test (https)
+        run: cargo test --features https --lib fetch
 
       - name: Build proxycli
         run: |

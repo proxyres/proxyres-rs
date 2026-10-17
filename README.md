@@ -11,7 +11,7 @@ The port is a work in progress. The API may change before the first release.
 * Resolve the proxies for a url asynchronously using `WinHTTP` on Windows and `CFNetwork` on macOS.
 * Or use the built-in resolver, which supports:
   * WPAD discovery using DHCP and DNS.
-  * Downloading PAC scripts using HTTP.
+  * Downloading PAC scripts using HTTP, or HTTPS with the `https` feature.
 * Handle multiple simultaneous resolution requests with a thread pool.
 * Example command line utility, `proxycli`.
 
@@ -51,6 +51,7 @@ let list = proxyres::execute::get_proxies_for_url(script, "https://example.com/"
 |Name|Description|Default|
 |:-|:-|:-:|
 |`quickjs`|Execute PAC scripts with the bundled QuickJS engine.|on|
+|`https`|Download PAC scripts using HTTPS with [ureq](https://github.com/algesten/ureq), verified with the operating system's certificate store. Without it, PAC scripts are downloaded using HTTP 1.0.|off|
 
 ## Command line
 
