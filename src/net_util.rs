@@ -1,6 +1,94 @@
 //! Network address helpers.
 
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::io;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs, UdpSocket};
+
+use crate::net_adapter::net_adapters;
+use crate::util::strip_ipv6_brackets;
+
+// Check whether an address is usable for reaching other hosts
+fn is_routable(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => !ip.is_loopback() && !ip.is_link_local() && !ip.is_unspecified(),
+        IpAddr::V6(ip) => !ip.is_loopback() && !ip.is_unicast_link_local() && !ip.is_unspecified(),
+    }
+}
+
+// Find the local address used to reach a remote address without sending any packets
+fn route_local_ip(remote: &str) -> Option<IpAddr> {
+    let socket = UdpSocket::bind(if remote.starts_with('[') { "[::]:0" } else { "0.0.0.0:0" }).ok()?;
+    socket.connect(remote).ok()?;
+    Some(socket.local_addr().ok()?.ip()).filter(is_routable)
+}
+
+/// Gets the IPv4 address of the local host.
+pub(crate) fn my_ip_address() -> Option<String> {
+    // Prefer the address of the interface with the default route
+    if let Some(ip) = route_local_ip("198.51.100.1:80") {
+        return Some(ip.to_string());
+    }
+    net_adapters()
+        .iter()
+        .filter(|adapter| adapter.is_connected)
+        .flat_map(|adapter| adapter.addresses.iter())
+        .find(|ip| ip.is_ipv4() && is_routable(ip))
+        .map(IpAddr::to_string)
+}
+
+/// Gets the IPv4 and IPv6 addresses of the local host separated by semicolons.
+pub(crate) fn my_ip_address_ex() -> Option<String> {
+    let mut addresses: Vec<IpAddr> = Vec::new();
+    for adapter in net_adapters().iter().filter(|adapter| adapter.is_connected) {
+        // List IPv4 addresses before IPv6 addresses for each adapter
+        let (ipv4, ipv6): (Vec<IpAddr>, Vec<IpAddr>) = adapter
+            .addresses
+            .iter()
+            .filter(|ip| is_routable(ip))
+            .partition(|ip| ip.is_ipv4());
+        addresses.extend(ipv4.into_iter().chain(ipv6));
+    }
+    if addresses.is_empty() {
+        addresses.extend(route_local_ip("198.51.100.1:80"));
+        addresses.extend(route_local_ip("[2001:db8::1]:80"));
+    }
+    let addresses: Vec<String> = addresses.iter().map(IpAddr::to_string).collect();
+    (!addresses.is_empty()).then(|| addresses.join(";"))
+}
+
+// Resolve a host name to its addresses
+fn resolve(host: &str) -> io::Result<Vec<IpAddr>> {
+    let mut addresses: Vec<IpAddr> = Vec::new();
+    for address in (strip_ipv6_brackets(host), 0).to_socket_addrs()? {
+        if !addresses.contains(&address.ip()) {
+            addresses.push(address.ip());
+        }
+    }
+    Ok(addresses)
+}
+
+// Error code for a failed resolution
+fn error_code(error: &io::Error) -> i32 {
+    error.raw_os_error().filter(|&code| code != 0).unwrap_or(-1)
+}
+
+/// Resolves a host name to its first IPv4 address.
+pub(crate) fn dns_resolve(host: &str) -> Result<String, i32> {
+    let addresses = resolve(host).map_err(|error| error_code(&error))?;
+    addresses
+        .iter()
+        .find(|ip| ip.is_ipv4())
+        .map(IpAddr::to_string)
+        .ok_or(-1)
+}
+
+/// Resolves a host name to its IPv4 and IPv6 addresses separated by semicolons.
+pub(crate) fn dns_resolve_ex(host: &str) -> Result<String, i32> {
+    let addresses = resolve(host).map_err(|error| error_code(&error))?;
+    if addresses.is_empty() {
+        return Err(-1);
+    }
+    Ok(addresses.iter().map(IpAddr::to_string).collect::<Vec<_>>().join(";"))
+}
 
 // Split cidr notation into its address and prefix length
 fn parse_cidr(cidr: &str) -> Option<(&str, u8)> {
@@ -47,6 +135,48 @@ pub(crate) fn is_ipv6_in_cidr_range(ip: &str, cidr: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn my_ip_address_single() {
+        let address = my_ip_address().expect("no local address");
+        assert!(address.contains('.'));
+        assert!(!address.contains([';', ':']));
+    }
+
+    #[test]
+    fn my_ip_address_multiple() {
+        let addresses = my_ip_address_ex().expect("no local addresses");
+        assert!(addresses.contains(['.', ':']));
+    }
+
+    #[test]
+    fn dns_resolve_literal() {
+        assert_eq!(dns_resolve("127.0.0.1").as_deref(), Ok("127.0.0.1"));
+        assert_eq!(dns_resolve_ex("::1").as_deref(), Ok("::1"));
+        assert_eq!(dns_resolve_ex("[::1]").as_deref(), Ok("::1"));
+        assert!(dns_resolve("::1").is_err());
+    }
+
+    #[test]
+    fn dns_resolve_localhost() {
+        let address = dns_resolve("localhost").expect("unable to resolve localhost");
+        assert_eq!(address, "127.0.0.1");
+    }
+
+    #[test]
+    fn dns_resolve_google() {
+        let address = dns_resolve("google.com").expect("unable to resolve google.com");
+        assert!(address.contains('.'));
+        assert!(!address.contains([';', ':']));
+        let addresses = dns_resolve_ex("google.com").expect("unable to resolve google.com");
+        assert!(addresses.contains(['.', ':']));
+    }
+
+    #[test]
+    fn dns_resolve_bad() {
+        let error = dns_resolve("hopefully-doesnt-exist.invalid").unwrap_err();
+        assert_ne!(error, 0);
+    }
 
     #[test]
     fn ipv4_cidr() {

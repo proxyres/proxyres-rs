@@ -4,5 +4,8 @@
 //! proxy configuration from the operating system, evaluates proxy auto-config (PAC) scripts, and
 //! resolves the list of proxies to use for a given URL.
 
+mod net_adapter;
 mod net_util;
 mod util;
+#[cfg(windows)]
+mod util_win;
