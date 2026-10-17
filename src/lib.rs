@@ -4,8 +4,14 @@
 //! proxy configuration from the operating system, evaluates proxy auto-config (PAC) scripts, and
 //! resolves the list of proxies to use for a given URL.
 
+pub mod config;
+
+#[cfg(target_os = "macos")]
+mod cf;
 mod net_adapter;
 mod net_util;
 mod util;
+#[cfg(any(target_os = "linux", test))]
+mod util_linux;
 #[cfg(windows)]
 mod util_win;
