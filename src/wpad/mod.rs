@@ -28,12 +28,15 @@ fn wpad_dhcp_adapter(adapter: &NetAdapter, timeout: Duration) -> Option<String> 
 
 /// Discovers the proxy auto-config url by asking each connected adapter's DHCP server.
 pub(crate) fn wpad_dhcp(timeout: Duration) -> Option<String> {
-    net_adapters()
-        .iter()
+    let mut adapters: Vec<NetAdapter> = net_adapters()
+        .into_iter()
         .filter(|adapter| adapter.is_connected && adapter.ipv4().is_some())
         // Only Windows reports whether an adapter uses DHCP
         .filter(|adapter| !cfg!(windows) || adapter.is_dhcp_v4)
-        .find_map(|adapter| wpad_dhcp_adapter(adapter, timeout))
+        .collect();
+    // Query the primary adapter first since it carries proxied traffic
+    adapters.sort_by_key(|adapter| !adapter.is_primary);
+    adapters.iter().find_map(|adapter| wpad_dhcp_adapter(adapter, timeout))
 }
 
 // Clean up a WPAD url returned by a DHCP server

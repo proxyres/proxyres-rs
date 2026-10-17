@@ -1,30 +1,15 @@
 //! Network address helpers.
 
 use std::io;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 
-use crate::net_adapter::net_adapters;
+use crate::net_adapter::{DEFAULT_ROUTE_V4, DEFAULT_ROUTE_V6, is_routable, net_adapters, route_local_ip};
 use crate::util::strip_ipv6_brackets;
-
-// Check whether an address is usable for reaching other hosts
-fn is_routable(ip: &IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ip) => !ip.is_loopback() && !ip.is_link_local() && !ip.is_unspecified(),
-        IpAddr::V6(ip) => !ip.is_loopback() && !ip.is_unicast_link_local() && !ip.is_unspecified(),
-    }
-}
-
-// Find the local address used to reach a remote address without sending any packets
-fn route_local_ip(remote: &str) -> Option<IpAddr> {
-    let socket = UdpSocket::bind(if remote.starts_with('[') { "[::]:0" } else { "0.0.0.0:0" }).ok()?;
-    socket.connect(remote).ok()?;
-    Some(socket.local_addr().ok()?.ip()).filter(is_routable)
-}
 
 /// Gets the IPv4 address of the local host.
 pub(crate) fn my_ip_address() -> Option<String> {
     // Prefer the address of the interface with the default route
-    if let Some(ip) = route_local_ip("198.51.100.1:80") {
+    if let Some(ip) = route_local_ip(DEFAULT_ROUTE_V4) {
         return Some(ip.to_string());
     }
     net_adapters()
@@ -48,8 +33,8 @@ pub(crate) fn my_ip_address_ex() -> Option<String> {
         addresses.extend(ipv4.into_iter().chain(ipv6));
     }
     if addresses.is_empty() {
-        addresses.extend(route_local_ip("198.51.100.1:80"));
-        addresses.extend(route_local_ip("[2001:db8::1]:80"));
+        addresses.extend(route_local_ip(DEFAULT_ROUTE_V4));
+        addresses.extend(route_local_ip(DEFAULT_ROUTE_V6));
     }
     let addresses: Vec<String> = addresses.iter().map(IpAddr::to_string).collect();
     (!addresses.is_empty()).then(|| addresses.join(";"))

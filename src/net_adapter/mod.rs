@@ -1,7 +1,7 @@
 //! Network adapter enumeration.
 
 use std::fmt;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 
 #[cfg(unix)]
 mod unix;
@@ -29,6 +29,8 @@ pub(crate) struct NetAdapter {
     pub dhcp_server: Option<Ipv4Addr>,
     pub is_connected: bool,
     pub is_dhcp_v4: bool,
+    /// Whether the adapter carries the default route
+    pub is_primary: bool,
 }
 
 impl NetAdapter {
@@ -69,13 +71,42 @@ impl fmt::Display for NetAdapter {
         if self.is_connected {
             writeln!(f, "  connected")?;
         }
+        if self.is_primary {
+            writeln!(f, "  primary")?;
+        }
         Ok(())
     }
 }
 
+/// Remote addresses used to find the local addresses of the default routes.
+pub(crate) const DEFAULT_ROUTE_V4: &str = "198.51.100.1:80";
+pub(crate) const DEFAULT_ROUTE_V6: &str = "[2001:db8::1]:80";
+
+/// Checks whether an address is usable for reaching other hosts.
+pub(crate) fn is_routable(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => !ip.is_loopback() && !ip.is_link_local() && !ip.is_unspecified(),
+        IpAddr::V6(ip) => !ip.is_loopback() && !ip.is_unicast_link_local() && !ip.is_unspecified(),
+    }
+}
+
+/// Finds the local address used to reach a remote address without sending any packets.
+pub(crate) fn route_local_ip(remote: &str) -> Option<IpAddr> {
+    let socket = UdpSocket::bind(if remote.starts_with('[') { "[::]:0" } else { "0.0.0.0:0" }).ok()?;
+    socket.connect(remote).ok()?;
+    Some(socket.local_addr().ok()?.ip()).filter(is_routable)
+}
+
 /// Enumerates ethernet and wireless network adapters.
 pub(crate) fn net_adapters() -> Vec<NetAdapter> {
-    imp::net_adapters()
+    let mut adapters = imp::net_adapters();
+    // The primary adapter owns the local address of the default route
+    if let Some(primary_ip) = route_local_ip(DEFAULT_ROUTE_V4) {
+        for adapter in &mut adapters {
+            adapter.is_primary = adapter.addresses.contains(&primary_ip);
+        }
+    }
+    adapters
 }
 
 /// Returns the IPv4 netmask for a prefix length.
