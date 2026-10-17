@@ -75,10 +75,13 @@ let list = proxyres::execute::get_proxies_for_url(script, "https://example.com/"
 
 ## Command line
 
+The [cli](cli) crate builds `proxycli`, which reads the proxy configuration, executes PAC scripts, and resolves proxies for urls. Add `--verbose` to print progress and debug logging, or `--help` for usage.
+
 ```sh
-cargo run --bin proxycli -- config
-cargo run --bin proxycli -- resolve https://example.com/
-cargo run --bin proxycli -- execute tests/pac.js https://simple.com/
+cargo run -p proxyres-cli -- config
+cargo run -p proxyres-cli -- config proxy https
+cargo run -p proxyres-cli -- resolve https://example.com/
+cargo run -p proxyres-cli -- execute tests/pac.js https://simple.com/
 ```
 
 ## C API
