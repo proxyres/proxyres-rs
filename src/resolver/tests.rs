@@ -1,19 +1,22 @@
-use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::thread;
 use std::time::Duration;
 
 use super::*;
 use crate::config::{set_auto_config_url_override, set_bypass_list_override, set_proxy_override, test_lock};
 
+// Scripts can be executed by the bundled engine or by the system resolver on Windows and macOS
+#[cfg(any(feature = "quickjs", windows, target_os = "macos"))]
 const PAC_SCRIPT: &str = include_str!("../../tests/pac.js");
 const WAIT_TIMEOUT: Option<Duration> = Some(Duration::from_secs(60));
 
 // Serve a PAC script on a local port for every connection and return its url
+#[cfg(any(feature = "quickjs", windows, target_os = "macos"))]
 fn serve_pac(script: &'static str) -> String {
+    use std::io::{Read, Write};
+
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
-    thread::spawn(move || {
+    std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else {
                 continue;
@@ -101,6 +104,7 @@ fn manual_proxy_bypass() {
     reset_overrides();
 }
 
+#[cfg(feature = "quickjs")]
 #[test]
 fn builtin_pac_url() {
     let _lock = test_lock();
@@ -133,6 +137,7 @@ fn builtin_pac_url() {
     reset_overrides();
 }
 
+#[cfg(any(feature = "quickjs", windows, target_os = "macos"))]
 #[test]
 fn system_pac_url() {
     let _lock = test_lock();
@@ -157,6 +162,7 @@ fn system_pac_url() {
     reset_overrides();
 }
 
+#[cfg(feature = "quickjs")]
 #[test]
 fn next_proxy() {
     let _lock = test_lock();
@@ -190,6 +196,7 @@ fn fetch_failure() {
     reset_overrides();
 }
 
+#[cfg(feature = "quickjs")]
 #[test]
 fn script_failure() {
     let _lock = test_lock();
