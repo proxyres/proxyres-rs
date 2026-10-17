@@ -3,12 +3,13 @@ name = "proxyres"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-license = "MIT"
+license = "MIT AND MPL-2.0"
 description = "Cross-platform proxy resolution"
 repository = "https://github.com/proxyres/proxyres-rs"
 readme = "README.md"
 keywords = ["proxy", "pac", "wpad"]
 categories = ["network-programming"]
+exclude = [".github/"]
 
 [workspace]
 members = ["capi"]
