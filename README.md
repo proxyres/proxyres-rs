@@ -7,7 +7,7 @@ The port is a work in progress. The API may change before the first release.
 ## Features
 
 * Read the user's proxy configuration from the operating system.
-* Execute proxy auto-config (PAC) scripts with the bundled [QuickJS](https://github.com/quickjs-ng/quickjs) engine, `JavaScriptCore`, or `Windows Script Host`.
+* Execute proxy auto-config (PAC) scripts with `JavaScriptCore`, `Windows Script Host`, or the bundled [QuickJS](https://github.com/quickjs-ng/quickjs) engine.
 * Resolve the proxies for a url asynchronously using `WinHTTP` on Windows and `CFNetwork` on macOS.
 * Or use the built-in resolver, which supports:
   * WPAD discovery using DHCP and DNS.
@@ -19,11 +19,11 @@ The port is a work in progress. The API may change before the first release.
 
 |Platform|Configuration|Resolver|Script engines|
 |:-|:-|:-|:-|
-|Windows|WinInet|WinHTTP|QuickJS, Windows Script Host|
-|macOS|CFNetwork|CFNetwork, built-in WPAD discovery|QuickJS, JavaScriptCore|
-|Linux|GNOME 3 GSettings, KDE kioslaverc, environment variables|Built-in|QuickJS, JavaScriptCoreGTK|
+|Windows|WinInet|WinHTTP|Windows Script Host|
+|macOS|CFNetwork|CFNetwork, built-in WPAD discovery|JavaScriptCore|
+|Linux|GNOME 3 GSettings, KDE kioslaverc, environment variables|Built-in|JavaScriptCoreGTK|
 
-System script engines are loaded at run-time, and the bundled engine is preferred when it is enabled.
+Script engines are loaded at run-time, and the bundled QuickJS engine is used instead when the `quickjs` feature is enabled.
 
 ## Example
 
@@ -52,7 +52,7 @@ let list = proxyres::execute::get_proxies_for_url(script, "https://example.com/"
 
 |Name|Description|Default|
 |:-|:-|:-:|
-|`quickjs`|Execute PAC scripts with the bundled QuickJS engine. Without it, the system script engine is used.|on|
+|`quickjs`|Execute PAC scripts with the bundled QuickJS engine instead of the system engine, with memory and time limits. Adds about 1.2 MB and requires Rust 1.87.|off|
 |`https`|Download PAC scripts using HTTPS with [ureq](https://github.com/algesten/ureq), verified with the operating system's certificate store. Without it, PAC scripts are downloaded using HTTP 1.0.|off|
 
 ## Command line
@@ -76,7 +76,6 @@ Strings returned as `char *` must be released with `free`, and strings returned 
 ## Differences from the C library
 
 * Global initialization and cleanup are not needed.
-* PAC scripts run in the bundled QuickJS engine by default, with memory and time limits.
 * The url and host are passed to `FindProxyForURL` as arguments, never as script source.
 * The `host` passed to `FindProxyForURL` excludes the port.
 * `dnsResolve` returns `null` for hosts that cannot be resolved.

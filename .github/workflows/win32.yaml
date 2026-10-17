@@ -15,11 +15,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # QuickJS has no bindings for 32-bit MSVC so Windows Script Host executes PAC scripts
           - name: Build - Windows Win32
             runs-on: windows-latest
             target: i686-pc-windows-msvc
-            cargo-args: --target i686-pc-windows-msvc --no-default-features
+            cargo-args: --target i686-pc-windows-msvc
             binary-dir: target/i686-pc-windows-msvc/debug
 
           - name: Build - Windows Win64
@@ -38,10 +37,10 @@ jobs:
             cargo-args: --features https
             codecov: windows_https
 
-          - name: Build - Windows (wsh)
+          - name: Build - Windows (quickjs)
             runs-on: windows-latest
-            cargo-args: --no-default-features
-            codecov: windows_wsh
+            cargo-args: --features quickjs
+            codecov: windows_quickjs
 
           - name: Build - Windows (capi)
             runs-on: windows-latest

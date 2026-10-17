@@ -42,17 +42,17 @@ jobs:
             packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
             codecov: ubuntu_https
 
-          - name: Build - Ubuntu (javascriptcore)
+          - name: Build - Ubuntu (quickjs)
             runs-on: ubuntu-latest
-            cargo-args: --no-default-features
+            cargo-args: --features quickjs
             packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
-            codecov: ubuntu_javascriptcore
+            codecov: ubuntu_quickjs
 
-          - name: Build - Ubuntu 26 (javascriptcore)
+          - name: Build - Ubuntu 26 (quickjs)
             runs-on: ubuntu-26.04
-            cargo-args: --no-default-features
+            cargo-args: --features quickjs
             packages: libjavascriptcoregtk-6.0-dev gsettings-desktop-schemas
-            codecov: ubuntu_javascriptcore
+            codecov: ubuntu_quickjs
 
           - name: Build - Ubuntu (capi)
             runs-on: ubuntu-latest

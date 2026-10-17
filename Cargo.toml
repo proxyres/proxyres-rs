@@ -14,8 +14,8 @@ categories = ["network-programming"]
 members = ["capi"]
 
 [features]
-default = ["quickjs"]
-# Execute PAC scripts with the bundled QuickJS engine
+default = []
+# Execute PAC scripts with the bundled QuickJS engine instead of the system engine
 quickjs = ["dep:rquickjs"]
 # Download PAC scripts using HTTPS, verified with the operating system's certificate store
 https = ["dep:ureq"]

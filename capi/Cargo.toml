@@ -12,7 +12,7 @@ publish = false
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-default = ["quickjs"]
+default = []
 quickjs = ["proxyres/quickjs"]
 https = ["proxyres/https"]
 
