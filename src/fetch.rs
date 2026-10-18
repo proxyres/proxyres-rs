@@ -262,6 +262,30 @@ pub(crate) mod tests {
         ));
     }
 
+    #[test]
+    fn missing_host() {
+        assert!(
+            matches!(fetch_http("http:///wpad.dat"), Err(Error::Fetch(message)) if message.contains("missing host"))
+        );
+    }
+
+    #[test]
+    fn chunked_not_supported() {
+        let url = serve_once(response(
+            "200 OK",
+            "Transfer-Encoding: chunked\r\n",
+            "4\r\nfunc\r\n0\r\n\r\n",
+        ));
+        assert!(matches!(fetch_http(&url), Err(Error::Fetch(message)) if message.contains("chunked")));
+    }
+
+    #[test]
+    fn headers_too_large() {
+        let headers = format!("X-Padding: {}\r\n", "x".repeat(HEADER_MAX * 2));
+        let url = serve_once(response("200 OK", &headers, "function"));
+        assert!(matches!(fetch_http(&url), Err(Error::Fetch(message)) if message.contains("too large")));
+    }
+
     #[cfg(feature = "https")]
     mod https {
         use super::*;
@@ -284,6 +308,12 @@ pub(crate) mod tests {
             let body = "x".repeat(SCRIPT_MAX + 1);
             let url = serve_once(response("200 OK", "", &body));
             assert!(matches!(fetch_get(&url), Err(Error::Fetch(_))));
+        }
+
+        #[test]
+        fn empty() {
+            let url = serve_once(response("200 OK", "Content-Length: 0\r\n", ""));
+            assert!(matches!(fetch_get(&url), Err(Error::Fetch(message)) if message.contains("empty")));
         }
 
         #[test]
