@@ -171,6 +171,7 @@ mod tests {
         assert!(!is_ipv4_in_cidr_range("192.168.0.1", "192.168.0.1/33"));
         assert!(!is_ipv4_in_cidr_range("192.168.0.1", "192.168.0.1"));
         assert!(!is_ipv4_in_cidr_range("::1", "192.168.0.1/8"));
+        assert!(!is_ipv4_in_cidr_range("192.168.0.1", "invalid/8"));
     }
 
     #[test]
@@ -180,5 +181,7 @@ mod tests {
         assert!(!is_ipv6_in_cidr_range("::ffff:c0a8:0", "::ffff:c0a8:1/128"));
         assert!(!is_ipv6_in_cidr_range("::1", "::1/129"));
         assert!(!is_ipv6_in_cidr_range("127.0.0.1", "::1/128"));
+        assert!(!is_ipv6_in_cidr_range("::1", "::1"));
+        assert!(!is_ipv6_in_cidr_range("::1", "invalid/64"));
     }
 }

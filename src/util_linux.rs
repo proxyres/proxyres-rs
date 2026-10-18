@@ -164,7 +164,7 @@ httpsProxy=http://127.0.0.1:8001/";
 
     #[test]
     fn desktop_env_cases() {
-        let tests: [(Vars, bool, DesktopEnv); 9] = [
+        let tests: [(Vars, bool, DesktopEnv); 14] = [
             (&[("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")], true, DesktopEnv::Gnome3),
             (&[("XDG_CURRENT_DESKTOP", "XFCE")], true, DesktopEnv::Gnome3),
             (
@@ -186,6 +186,20 @@ httpsProxy=http://127.0.0.1:8001/";
             ),
             (&[("KDE_FULL_SESSION", "true")], true, DesktopEnv::Kde3),
             (&[], true, DesktopEnv::Unknown),
+            // Unrecognized desktops fall through to the older variables
+            (&[("XDG_CURRENT_DESKTOP", "LXQt")], true, DesktopEnv::Unknown),
+            (&[("DESKTOP_SESSION", "lxqt")], true, DesktopEnv::Unknown),
+            (&[("DESKTOP_SESSION", "gnome")], true, DesktopEnv::Gnome3),
+            (
+                &[("DESKTOP_SESSION", "kde"), ("KDE_SESSION_VERSION", "5")],
+                true,
+                DesktopEnv::Kde5,
+            ),
+            (
+                &[("GNOME_DESKTOP_SESSION_ID", "this-is-deprecated")],
+                false,
+                DesktopEnv::Gnome2,
+            ),
         ];
         for (vars, has_gsettings, expected) in tests {
             assert_eq!(

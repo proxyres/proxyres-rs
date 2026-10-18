@@ -281,6 +281,8 @@ mod tests {
             ("[::1]:80", ("[::1]", Some(80))),
             ("::1", ("::1", None)),
             ("::ffff:c0a8:1", ("::ffff:c0a8:1", None)),
+            // Unterminated IPv6 literal
+            ("[::1", ("[::1", None)),
         ];
         for (host, expected) in tests {
             assert_eq!(split_host_port(host), expected, "host: {host}");
@@ -312,6 +314,11 @@ mod tests {
             ("http", "http://127.0.0.1:8000/", "http://127.0.0.1:8000"),
             // IPv6 literal without port
             ("http", "[::1]", "http://[::1]:80"),
+            // Default ports of other schemes
+            ("http", "socks://proxy", "socks://proxy:1080"),
+            ("http", "ftp://proxy", "ftp://proxy:21"),
+            // Unknown scheme has no default port
+            ("http", "gopher://proxy", "gopher://proxy"),
         ];
         for (scheme, host, expected) in tests {
             assert_eq!(url_from_host(scheme, host), expected, "scheme: {scheme} host: {host}");
@@ -325,6 +332,8 @@ mod tests {
             ("PROXY 127.0.0.1:80", None, "http://127.0.0.1:80"),
             ("PROXY 127.0.0.1:8080", None, "http://127.0.0.1:8080"),
             ("PROXY 127.0.0.1:443", None, "https://127.0.0.1:443"),
+            ("PROXY 127.0.0.1:1080", None, "socks://127.0.0.1:1080"),
+            ("PROXY 127.0.0.1:21", None, "ftp://127.0.0.1:21"),
             ("PROXY myproxy0.com:90", Some("http"), "http://myproxy0.com:90"),
             ("PROXY myproxy1.com:90", Some("https"), "https://myproxy1.com:90"),
             (

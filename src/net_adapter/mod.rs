@@ -128,6 +128,19 @@ mod tests {
     }
 
     #[test]
+    fn first_ipv4_address() {
+        let adapter = NetAdapter {
+            addresses: ["fe80::1", "192.168.1.5", "10.0.0.1"]
+                .iter()
+                .map(|address| address.parse().unwrap())
+                .collect(),
+            ..Default::default()
+        };
+        assert_eq!(adapter.ipv4(), Some(Ipv4Addr::new(192, 168, 1, 5)));
+        assert_eq!(NetAdapter::default().ipv4(), None);
+    }
+
+    #[test]
     fn netmask() {
         assert_eq!(prefix_to_netmask(24), Ipv4Addr::new(255, 255, 255, 0));
         assert_eq!(prefix_to_netmask(0), Ipv4Addr::UNSPECIFIED);
