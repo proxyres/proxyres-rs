@@ -109,7 +109,7 @@ fn random_xid() -> u32 {
 }
 
 /// Sends a DHCPINFORM request to the target address and waits for the WPAD url in the reply.
-pub(super) fn request_wpad(bind_ip: Ipv4Addr, mac: &[u8], target: SocketAddr, timeout: Duration) -> Option<String> {
+pub(super) fn retrieve_wpad(bind_ip: Ipv4Addr, mac: &[u8], target: SocketAddr, timeout: Duration) -> Option<String> {
     let socket = match UdpSocket::bind(SocketAddrV4::new(bind_ip, DHCP_CLIENT_PORT)) {
         Ok(socket) => socket,
         // Likely can't bind to the protected client port, try again with a random port
@@ -152,7 +152,7 @@ pub(super) fn request_wpad(bind_ip: Ipv4Addr, mac: &[u8], target: SocketAddr, ti
 pub(super) fn wpad_dhcp_adapter(adapter: &NetAdapter, timeout: Duration) -> Option<String> {
     let ip = adapter.ipv4()?;
     let target = SocketAddr::from((Ipv4Addr::BROADCAST, DHCP_SERVER_PORT));
-    request_wpad(ip, &adapter.mac, target, timeout)
+    retrieve_wpad(ip, &adapter.mac, target, timeout)
 }
 
 #[cfg(test)]
@@ -263,7 +263,7 @@ mod tests {
             options.push(DHCP_OPT_END);
             server.send_to(&build_reply(request, &options), client).unwrap();
         });
-        let wpad = request_wpad(Ipv4Addr::LOCALHOST, &[0xaa; 6], target, Duration::from_secs(5));
+        let wpad = retrieve_wpad(Ipv4Addr::LOCALHOST, &[0xaa; 6], target, Duration::from_secs(5));
         assert_eq!(wpad.as_deref(), Some("http://wpad.com/wpad.dat"));
     }
 
@@ -274,7 +274,7 @@ mod tests {
         let target = server.local_addr().unwrap();
         let start = Instant::now();
         assert_eq!(
-            request_wpad(Ipv4Addr::LOCALHOST, &[0xaa; 6], target, Duration::from_millis(300)),
+            retrieve_wpad(Ipv4Addr::LOCALHOST, &[0xaa; 6], target, Duration::from_millis(300)),
             None
         );
         assert!(start.elapsed() < Duration::from_secs(3));
