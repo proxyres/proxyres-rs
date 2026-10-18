@@ -48,28 +48,28 @@ static OVERRIDES: Mutex<Overrides> = Mutex::new(Overrides {
     bypass_list: None,
 });
 
-static BACKEND: OnceLock<Option<Box<dyn ConfigBackend>>> = OnceLock::new();
+static BACKEND: OnceLock<Box<dyn ConfigBackend>> = OnceLock::new();
 
 fn overrides() -> MutexGuard<'static, Overrides> {
     OVERRIDES.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn backend() -> Option<&'static dyn ConfigBackend> {
-    BACKEND.get_or_init(create_backend).as_deref()
+fn backend() -> &'static dyn ConfigBackend {
+    &**BACKEND.get_or_init(create_backend)
 }
 
 #[cfg(windows)]
-fn create_backend() -> Option<Box<dyn ConfigBackend>> {
-    Some(Box::new(windows::WindowsConfig))
+fn create_backend() -> Box<dyn ConfigBackend> {
+    Box::new(windows::WindowsConfig)
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn create_backend() -> Option<Box<dyn ConfigBackend>> {
-    Some(Box::new(macos::MacConfig))
+fn create_backend() -> Box<dyn ConfigBackend> {
+    Box::new(macos::MacConfig)
 }
 
 #[cfg(target_os = "linux")]
-fn create_backend() -> Option<Box<dyn ConfigBackend>> {
+fn create_backend() -> Box<dyn ConfigBackend> {
     use crate::util_linux::{DesktopEnv, desktop_env};
 
     let desktop_env = desktop_env();
@@ -80,12 +80,12 @@ fn create_backend() -> Option<Box<dyn ConfigBackend>> {
         }
         _ => None,
     };
-    backend.or_else(|| Some(Box::new(env::EnvConfig)))
+    backend.unwrap_or_else(|| Box::new(env::EnvConfig))
 }
 
 #[cfg(all(unix, not(any(target_os = "linux", target_os = "macos", target_os = "ios"))))]
-fn create_backend() -> Option<Box<dyn ConfigBackend>> {
-    Some(Box::new(env::EnvConfig))
+fn create_backend() -> Box<dyn ConfigBackend> {
+    Box::new(env::EnvConfig)
 }
 
 /// Reads whether proxy auto-discovery (WPAD) is enabled on the user's system.
@@ -98,7 +98,7 @@ pub fn auto_discover() -> bool {
             return false;
         }
     }
-    backend().is_some_and(|backend| backend.auto_discover())
+    backend().auto_discover()
 }
 
 /// Reads the proxy auto-config (PAC) url configured on the user's system.
@@ -106,7 +106,7 @@ pub fn auto_config_url() -> Option<String> {
     if let Some(auto_config_url) = &overrides().auto_config_url {
         return Some(auto_config_url.clone());
     }
-    backend()?.auto_config_url()
+    backend().auto_config_url()
 }
 
 // Get the lowercase scheme of a scheme or url
@@ -122,7 +122,7 @@ pub fn proxy(scheme: &str) -> Option<String> {
     if let Some(proxy) = &overrides().proxy {
         return Some(proxy.clone());
     }
-    backend()?.proxy(&normalize_scheme(scheme))
+    backend().proxy(&normalize_scheme(scheme))
 }
 
 /// Reads the comma-separated proxy bypass list configured on the user's system.
@@ -130,7 +130,7 @@ pub fn bypass_list() -> Option<String> {
     if let Some(bypass_list) = &overrides().bypass_list {
         return Some(bypass_list.clone());
     }
-    backend()?.bypass_list()
+    backend().bypass_list()
 }
 
 /// Overrides the user's configured proxy auto-config (PAC) url.
