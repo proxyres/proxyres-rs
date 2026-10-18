@@ -229,6 +229,65 @@ fn wait_without_request() {
     assert!(!resolver.cancel());
     assert_eq!(resolver.list(), None);
     assert_eq!(resolver.error(), None);
+    assert_eq!(Resolver::default().list(), None);
+}
+
+#[test]
+fn cancel_pending() {
+    let _lock = test_lock();
+    reset_overrides();
+    // Connections are never accepted, so the download waits until the listener is dropped
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    set_auto_config_url_override(Some(&format!("http://127.0.0.1:{port}/pac.js")));
+    let mut resolver = Resolver::with_backend(Backend::Builtin);
+    resolver.get_proxies_for_url("http://example.com/").unwrap();
+    assert!(!resolver.wait(Some(Duration::ZERO)));
+    // The built-in resolver can't stop a download that is already running
+    assert!(!resolver.cancel());
+    drop(listener);
+    assert!(resolver.wait(WAIT_TIMEOUT));
+    assert_eq!(resolver.error(), Some(&Error::Cancelled));
+    reset_overrides();
+}
+
+#[test]
+fn empty_pac_result() {
+    if !has_engine() {
+        return;
+    }
+    let _lock = test_lock();
+    reset_overrides();
+    set_auto_config_url_override(Some(&serve_pac("function FindProxyForURL(url, host) { return ''; }")));
+    assert_eq!(
+        resolve_with(Backend::Builtin, "http://example.com/").as_deref(),
+        Ok("direct://")
+    );
+    reset_overrides();
+}
+
+#[test]
+fn direct_without_configuration() {
+    let _lock = test_lock();
+    reset_overrides();
+    if config::proxy("http").is_some() || config::auto_config_url().is_some() || config::auto_discover() {
+        eprintln!("skipping test with a system proxy configuration");
+        return;
+    }
+    assert_eq!(
+        resolve_with(Backend::System, "http://example.com/").as_deref(),
+        Ok("direct://")
+    );
+}
+
+#[test]
+fn resolve_blocking_error() {
+    let _lock = test_lock();
+    reset_overrides();
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    set_auto_config_url_override(Some(&format!("http://127.0.0.1:{port}/pac.js")));
+    assert!(resolve("http://example.com/").is_err());
+    reset_overrides();
 }
 
 #[test]
