@@ -21,5 +21,5 @@ mod util;
 #[cfg(any(target_os = "linux", test))]
 mod util_linux;
 #[cfg(any(windows, test))]
-mod util_win;
+mod util_windows;
 mod wpad;

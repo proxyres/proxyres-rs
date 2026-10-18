@@ -10,7 +10,7 @@ use windows_sys::Win32::NetworkManagement::Ndis::IfOperStatusUp;
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6, AF_UNSPEC, SOCKADDR, SOCKADDR_IN, SOCKADDR_IN6};
 
 use super::{NetAdapter, prefix_to_netmask};
-use crate::util_win::wide_ptr_to_string;
+use crate::util_windows::wide_ptr_to_string;
 
 // Convert a socket address to an ip address
 unsafe fn sockaddr_to_ip(sockaddr: *const SOCKADDR) -> Option<IpAddr> {

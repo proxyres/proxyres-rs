@@ -19,7 +19,7 @@ use windows_sys::Win32::Networking::WinHttp::{
 };
 
 use super::{Cancel, ResolverBackend};
-use crate::util_win::{to_wide, wide_ptr_to_string};
+use crate::util_windows::{to_wide, wide_ptr_to_string};
 use crate::{Error, config};
 
 // Notifications for handle creation and closing

@@ -3,7 +3,7 @@
 #[cfg(unix)]
 use super::dns_unix::local_fqdn;
 #[cfg(windows)]
-use super::dns_win::local_fqdn;
+use super::dns_windows::local_fqdn;
 use crate::Error;
 use crate::fetch::fetch_get;
 

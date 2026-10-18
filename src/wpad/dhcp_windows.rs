@@ -10,7 +10,7 @@ use windows_sys::Win32::NetworkManagement::Dhcp::{
 
 use super::trim_wpad_url;
 use crate::net_adapter::NetAdapter;
-use crate::util_win::to_wide;
+use crate::util_windows::to_wide;
 
 const DHCP_OPT_WPAD: u32 = 252;
 
