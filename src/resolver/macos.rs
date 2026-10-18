@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::ffi::c_void;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use core_foundation_sys::array::{CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef};
@@ -26,6 +27,13 @@ use crate::{Error, config};
 
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(10);
 const CANCEL_POLL_INTERVAL: f64 = 0.1;
+
+// Serialize CFNetwork PAC evaluations across threads, which crash when they run concurrently.
+// Chromium also serializes them with a lock.
+fn pac_lock() -> MutexGuard<'static, ()> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 fn create_string(s: &str) -> Option<CfOwned> {
     // SAFETY: The bytes are valid for the duration of the call and the string is owned by the caller.
@@ -122,6 +130,7 @@ fn execute_pac_url(auto_config_url: &str, url: &str, cancel: &Cancel) -> Result<
         release: None,
         copy_description: None,
     };
+    let _lock = pac_lock();
     // SAFETY: The urls and context are valid and the source is invalidated before they are dropped.
     unsafe {
         let source = CFNetworkExecuteProxyAutoConfigurationURL(
@@ -157,6 +166,7 @@ fn execute_pac_script(script: &str, url: &str) -> Result<String, Error> {
     let script_string = create_string(script).ok_or_else(|| Error::Script("invalid script".to_string()))?;
     let target_url = create_url(url)?;
     let mut error: CFErrorRef = std::ptr::null_mut();
+    let _lock = pac_lock();
     // SAFETY: The script and url are valid and the returned array is owned by the caller.
     unsafe {
         let proxies = CFNetworkCopyProxiesForAutoConfigurationScript(
