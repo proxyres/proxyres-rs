@@ -4,8 +4,6 @@
 
 Cross-platform proxy resolution for Rust, ported from the C library [proxyres](https://github.com/proxyres/proxyres).
 
-The port is a work in progress. The API may change before the first release.
-
 ## Features
 
 * Read the user's proxy configuration from the operating system.
@@ -98,7 +96,6 @@ Strings returned as `char *` must be released with `free`, and strings returned 
 
 ## Differences from the C library
 
-* Global initialization and cleanup are not needed, and WPAD discovery at startup is started with `Backend::prefetch`.
 * The url and host are passed to `FindProxyForURL` as arguments, never as script source.
 * The `host` passed to `FindProxyForURL` excludes the port.
 * `dnsResolve` returns `null` for hosts that cannot be resolved.
