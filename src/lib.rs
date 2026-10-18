@@ -20,6 +20,6 @@ mod threadpool;
 mod util;
 #[cfg(any(target_os = "linux", test))]
 mod util_linux;
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 mod util_win;
 mod wpad;

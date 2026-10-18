@@ -14,8 +14,7 @@ use windows_sys::Win32::Networking::WinInet::{
 };
 
 use super::ConfigBackend;
-use crate::util::winhttp_proxy_by_scheme;
-use crate::util_win::wide_ptr_to_string;
+use crate::util_win::{wide_ptr_to_string, winhttp_proxy_by_scheme};
 
 // Query per-connection options for the default connection
 fn query_options(options: &mut [INTERNET_PER_CONN_OPTIONW]) -> bool {
