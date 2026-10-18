@@ -6,7 +6,7 @@ mod dhcp;
 #[cfg(target_os = "macos")]
 mod dhcp_macos;
 #[cfg(windows)]
-mod dhcp_windows;
+mod dhcp_win;
 mod dns;
 #[cfg(unix)]
 mod dns_unix;
@@ -20,7 +20,7 @@ use crate::net_adapter::{NetAdapter, net_adapters};
 // Get the WPAD url from an adapter's DHCP server
 fn wpad_dhcp_adapter(adapter: &NetAdapter, timeout: Duration) -> Option<String> {
     #[cfg(windows)]
-    if let Some(url) = dhcp_windows::wpad_dhcp_adapter(adapter) {
+    if let Some(url) = dhcp_win::wpad_dhcp_adapter(adapter) {
         return Some(url);
     }
     dhcp::wpad_dhcp_adapter(adapter, timeout)
