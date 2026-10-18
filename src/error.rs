@@ -35,3 +35,24 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display() {
+        let tests = [
+            (Error::NoResolver, "no proxy resolver available"),
+            (Error::NoScriptEngine, "no PAC script engine available"),
+            (Error::Script("boom".to_string()), "PAC script error: boom"),
+            (Error::Fetch("404".to_string()), "unable to fetch PAC script: 404"),
+            (Error::Os(5), "system error 5"),
+            (Error::Cancelled, "operation cancelled"),
+            (Error::Timeout, "operation timed out"),
+        ];
+        for (error, expected) in tests {
+            assert_eq!(error.to_string(), expected);
+        }
+    }
+}
