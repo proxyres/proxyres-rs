@@ -247,6 +247,18 @@ mod tests {
     }
 
     #[test]
+    fn reply_with_wrong_op_or_magic() {
+        let request = build_inform(1, &[0xaa; 6], Ipv4Addr::LOCALHOST);
+        let options = [DHCP_OPT_MSGTYPE, 1, DHCP_ACK, DHCP_OPT_END];
+        let mut reply = build_reply(&request, &options);
+        reply[0] = DHCP_BOOT_REQUEST;
+        assert_eq!(parse_reply(&reply, 1), Err("not a reply"));
+        let mut reply = build_reply(&request, &options);
+        reply[OPTIONS_OFFSET] ^= 0xff;
+        assert_eq!(parse_reply(&reply, 1), Err("invalid magic"));
+    }
+
+    #[test]
     fn request_to_local_server() {
         // Fake DHCP server that ignores the first request and answers with a WPAD url
         let server = UdpSocket::bind("127.0.0.1:0").unwrap();

@@ -145,6 +145,12 @@ mod tests {
     }
 
     #[test]
+    fn no_candidate_urls() {
+        // A single label has no WPAD urls so nothing is downloaded
+        assert_eq!(wpad_dns(Some("localhost")), None);
+    }
+
+    #[test]
     fn local_fqdn_is_available() {
         let fqdn = local_fqdn().expect("unable to get local host name");
         assert!(!fqdn.is_empty());

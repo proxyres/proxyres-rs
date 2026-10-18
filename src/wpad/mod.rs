@@ -70,4 +70,10 @@ mod tests {
         assert_eq!(trim_wpad_url(b"\0"), None);
         assert_eq!(trim_wpad_url(b""), None);
     }
+
+    #[test]
+    fn dhcp_discovery_returns() {
+        // Calls the operating system's DHCP interfaces, which find no WPAD url on most networks
+        println!("wpad: {:?}", wpad_dhcp(Duration::from_millis(500)));
+    }
 }
