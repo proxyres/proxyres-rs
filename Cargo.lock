@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "proxyres"
-version = "0.1.0"
+version = "1.5.5"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "proxyres-capi"
-version = "0.1.0"
+version = "1.5.5"
 dependencies = [
  "cc",
  "libc",
@@ -375,7 +375,7 @@ dependencies = [
 
 [[package]]
 name = "proxyres-cli"
-version = "0.1.0"
+version = "1.5.5"
 dependencies = [
  "clap",
  "log",
