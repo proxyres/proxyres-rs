@@ -11,7 +11,7 @@ use core_foundation_sys::dictionary::CFDictionaryRef;
 use core_foundation_sys::error::{CFErrorGetCode, CFErrorRef};
 use core_foundation_sys::runloop::{
     CFRunLoopAddSource, CFRunLoopGetCurrent, CFRunLoopRemoveSource, CFRunLoopRunInMode, CFRunLoopSourceInvalidate,
-    CFRunLoopStop,
+    CFRunLoopSourceRef, CFRunLoopStop,
 };
 use core_foundation_sys::string::{CFStringCreateWithBytes, CFStringGetTypeID, CFStringRef, kCFStringEncodingUTF8};
 use core_foundation_sys::url::{CFURLCreateWithBytes, CFURLRef};
@@ -19,7 +19,7 @@ use core_foundation_sys::url::{CFURLCreateWithBytes, CFURLRef};
 use super::{Cancel, ResolverBackend, posix};
 use crate::macos::cf::{CfOwned, cf_dictionary_i64, cf_dictionary_string, cf_dictionary_value};
 use crate::macos::cf_network::{
-    CFNetworkCopyProxiesForAutoConfigurationScript, CFNetworkExecuteProxyAutoConfigurationURL, StreamClientContext,
+    CFNetworkExecuteProxyAutoConfigurationScript, CFNetworkExecuteProxyAutoConfigurationURL, StreamClientContext,
     kCFProxyHostNameKey, kCFProxyPortNumberKey, kCFProxyTypeFTP, kCFProxyTypeHTTP, kCFProxyTypeHTTPS, kCFProxyTypeKey,
     kCFProxyTypeNone, kCFProxyTypeSOCKS,
 };
@@ -116,10 +116,12 @@ unsafe extern "C" fn auto_config_callback(client: *mut c_void, proxies: CFArrayR
     }
 }
 
-// Download and execute a PAC script url using the current thread's run loop
-fn execute_pac_url(auto_config_url: &str, url: &str, cancel: &Cancel) -> Result<String, Error> {
-    let pac_url = create_url(auto_config_url)?;
-    let target_url = create_url(url)?;
+// Run the PAC run loop source created with the context on the current thread's run loop
+fn execute_pac_source(
+    name: &str,
+    cancel: &Cancel,
+    create_source: impl FnOnce(*mut StreamClientContext) -> CFRunLoopSourceRef,
+) -> Result<String, Error> {
     let mode = create_string("proxyres.run_loop").ok_or(Error::Os(libc::ENOMEM))?;
 
     let result: RefCell<Option<Result<String, Error>>> = RefCell::new(None);
@@ -131,17 +133,12 @@ fn execute_pac_url(auto_config_url: &str, url: &str, cancel: &Cancel) -> Result<
         copy_description: None,
     };
     let _lock = pac_lock();
-    // SAFETY: The urls and context are valid and the source is invalidated before they are dropped.
+    let source = create_source(&mut context);
+    if source.is_null() {
+        return Err(Error::Script(format!("unable to execute {name}")));
+    }
+    // SAFETY: The context is valid and the source is invalidated before the context is dropped.
     unsafe {
-        let source = CFNetworkExecuteProxyAutoConfigurationURL(
-            pac_url.as_ptr() as CFURLRef,
-            target_url.as_ptr() as CFURLRef,
-            auto_config_callback,
-            &mut context,
-        );
-        if source.is_null() {
-            return Err(Error::Script(format!("unable to execute {auto_config_url}")));
-        }
         let run_loop = CFRunLoopGetCurrent();
         let mode = mode.as_ptr() as CFStringRef;
         CFRunLoopAddSource(run_loop, source, mode);
@@ -161,32 +158,38 @@ fn execute_pac_url(auto_config_url: &str, url: &str, cancel: &Cancel) -> Result<
     }
 }
 
-// Execute a PAC script
-fn execute_pac_script(script: &str, url: &str) -> Result<String, Error> {
+// Download and execute a PAC script url using the current thread's run loop
+fn execute_pac_url(auto_config_url: &str, url: &str, cancel: &Cancel) -> Result<String, Error> {
+    let pac_url = create_url(auto_config_url)?;
+    let target_url = create_url(url)?;
+    execute_pac_source(auto_config_url, cancel, |context| {
+        // SAFETY: The urls and context outlive the source.
+        unsafe {
+            CFNetworkExecuteProxyAutoConfigurationURL(
+                pac_url.as_ptr() as CFURLRef,
+                target_url.as_ptr() as CFURLRef,
+                auto_config_callback,
+                context,
+            )
+        }
+    })
+}
+
+// Execute a PAC script using the current thread's run loop
+fn execute_pac_script(script: &str, url: &str, cancel: &Cancel) -> Result<String, Error> {
     let script_string = create_string(script).ok_or_else(|| Error::Script("invalid script".to_string()))?;
     let target_url = create_url(url)?;
-    let mut error: CFErrorRef = std::ptr::null_mut();
-    let _lock = pac_lock();
-    // SAFETY: The script and url are valid and the returned array is owned by the caller.
-    unsafe {
-        let proxies = CFNetworkCopyProxiesForAutoConfigurationScript(
-            script_string.as_ptr() as CFStringRef,
-            target_url.as_ptr() as CFURLRef,
-            &mut error,
-        );
-        let Some(proxies) = CfOwned::new(proxies as CFTypeRef) else {
-            let code = if error.is_null() {
-                -1
-            } else {
-                CFErrorGetCode(error) as i32
-            };
-            if !error.is_null() {
-                CFRelease(error as CFTypeRef);
-            }
-            return Err(Error::Os(code));
-        };
-        Ok(convert_proxy_array(proxies.as_ptr() as CFArrayRef))
-    }
+    execute_pac_source("script", cancel, |context| {
+        // SAFETY: The script, url and context outlive the source.
+        unsafe {
+            CFNetworkExecuteProxyAutoConfigurationScript(
+                script_string.as_ptr() as CFStringRef,
+                target_url.as_ptr() as CFURLRef,
+                auto_config_callback,
+                context,
+            )
+        }
+    })
 }
 
 pub(super) struct MacResolver;
@@ -199,7 +202,7 @@ impl ResolverBackend for MacResolver {
         // CFNetwork does not discover PAC urls so use WPAD
         if config::auto_discover() {
             if let Some(script) = posix::discover_script(cancel)? {
-                return execute_pac_script(&script, url);
+                return execute_pac_script(&script, url, cancel);
             }
         }
         Ok("direct://".to_string())
@@ -218,14 +221,18 @@ mod tests {
     fn execute_script() {
         let script = r#"function FindProxyForURL(url, host) { return "SOCKS socks.example.com:1080; PROXY proxy.example.com:8080; DIRECT"; }"#;
         assert_eq!(
-            execute_pac_script(script, "http://example.com/").as_deref(),
+            execute_pac_script(script, "http://example.com/", &Cancel::default()).as_deref(),
             Ok("socks://socks.example.com:1080,http://proxy.example.com:8080,direct://")
         );
     }
 
     #[test]
     fn execute_invalid_script() {
-        let result = execute_pac_script("function FindProxyForURL(url, host) {", "http://example.com/");
+        let result = execute_pac_script(
+            "function FindProxyForURL(url, host) {",
+            "http://example.com/",
+            &Cancel::default(),
+        );
         assert!(result.is_err(), "{result:?}");
     }
 }

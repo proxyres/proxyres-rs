@@ -30,11 +30,12 @@ unsafe extern "C" {
         callback: AutoConfigurationClientCallback,
         client_context: *mut StreamClientContext,
     ) -> CFRunLoopSourceRef;
-    pub(crate) fn CFNetworkCopyProxiesForAutoConfigurationScript(
+    pub(crate) fn CFNetworkExecuteProxyAutoConfigurationScript(
         proxy_auto_configuration_script: CFStringRef,
         target_url: CFURLRef,
-        error: *mut CFErrorRef,
-    ) -> CFArrayRef;
+        callback: AutoConfigurationClientCallback,
+        client_context: *mut StreamClientContext,
+    ) -> CFRunLoopSourceRef;
 
     pub(crate) static kCFNetworkProxiesHTTPEnable: CFStringRef;
     pub(crate) static kCFNetworkProxiesHTTPProxy: CFStringRef;
