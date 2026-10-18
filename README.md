@@ -102,7 +102,6 @@ Strings returned as `char *` must be released with `free`, and strings returned 
 * The url and host are passed to `FindProxyForURL` as arguments, never as script source.
 * The `host` passed to `FindProxyForURL` excludes the port.
 * `dnsResolve` returns `null` for hosts that cannot be resolved.
-* Proxy bypass rules are evaluated independently of each other.
 * WPAD discovery is supported on macOS.
 * GNOME 2 GConf, Windows XP through 8.1, and Windows Store apps are not supported.
 
