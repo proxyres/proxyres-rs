@@ -509,3 +509,24 @@ pub extern "C" fn proxy_execute_global_init() -> bool {
 pub extern "C" fn proxy_execute_global_cleanup() -> bool {
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_codes() {
+        let tests = [
+            (Error::Os(5), 5),
+            (Error::Cancelled, libc::ECANCELED),
+            (Error::Timeout, libc::ETIMEDOUT),
+            (Error::Fetch("404".to_string()), libc::EIO),
+            (Error::NoResolver, libc::ENOSYS),
+            (Error::NoScriptEngine, libc::ENOSYS),
+            (Error::Script("boom".to_string()), libc::EINVAL),
+        ];
+        for (error, expected) in tests {
+            assert_eq!(error_code(&error), expected, "{error:?}");
+        }
+    }
+}

@@ -1,8 +1,15 @@
 use std::ffi::{CStr, CString, c_char, c_void};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use proxyres_capi::*;
 
 const PAC_SCRIPT: &str = include_str!("../../tests/pac.js");
+
+// Serializes tests that log messages or read the last logged message
+fn log_lock() -> MutexGuard<'static, ()> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 // Take ownership of a string allocated with malloc
 fn take_string(ptr: *mut c_char) -> Option<String> {
@@ -28,15 +35,27 @@ fn global_init() {
     assert!(proxy_config_global_init());
     assert!(proxy_resolver_global_init());
     assert!(proxyres_global_cleanup());
+    assert!(proxy_config_global_cleanup());
+    assert!(proxy_resolver_global_cleanup());
+    assert!(proxy_execute_global_cleanup());
 }
 
 // Config overrides are global so all config and resolver checks run in one test
 #[test]
 fn config_and_resolver() {
+    let _lock = log_lock();
     let proxy = CString::new("my.proxy:8080").unwrap();
     let bypass_list = CString::new("<local>,*.example.com").unwrap();
     let scheme = CString::new("https").unwrap();
+    let auto_config_url = CString::new("http://127.0.0.1:8080/pac.js").unwrap();
     unsafe {
+        proxy_config_set_auto_config_url_override(auto_config_url.as_ptr());
+        assert_eq!(
+            take_string(proxy_config_get_auto_config_url()).as_deref(),
+            Some("http://127.0.0.1:8080/pac.js")
+        );
+        proxy_config_set_auto_config_url_override(std::ptr::null());
+
         proxy_config_set_proxy_override(proxy.as_ptr());
         proxy_config_set_bypass_list_override(bypass_list.as_ptr());
         assert_eq!(
@@ -52,6 +71,7 @@ fn config_and_resolver() {
 
         let mut resolver = proxy_resolver_create();
         assert!(!resolver.is_null());
+        assert!(proxy_resolver_get_list(resolver).is_null());
         let url = CString::new("https://example.org/").unwrap();
         assert!(proxy_resolver_get_proxies_for_url(resolver, url.as_ptr()));
         assert!(proxy_resolver_wait(resolver, -1));
@@ -74,6 +94,8 @@ fn config_and_resolver() {
             borrowed_string(proxy_resolver_get_list(resolver)).as_deref(),
             Some("direct://")
         );
+        // Cancelling a completed resolution succeeds
+        assert!(proxy_resolver_cancel(resolver));
 
         assert!(proxy_resolver_delete(&mut resolver));
         assert!(resolver.is_null());
@@ -92,9 +114,16 @@ fn null_instances() {
             std::ptr::null()
         ));
         assert!(proxy_resolver_get_list(std::ptr::null_mut()).is_null());
+        assert!(proxy_resolver_get_next_proxy(std::ptr::null_mut()).is_null());
         assert_eq!(proxy_resolver_get_error(std::ptr::null_mut()), -1);
         assert!(!proxy_resolver_wait(std::ptr::null_mut(), 0));
+        assert!(!proxy_resolver_cancel(std::ptr::null_mut()));
         assert!(!proxy_resolver_delete(std::ptr::null_mut()));
+        assert!(!proxy_execute_get_proxies_for_url(
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            std::ptr::null()
+        ));
         assert!(proxy_execute_get_list(std::ptr::null_mut()).is_null());
         assert_eq!(proxy_execute_get_error(std::ptr::null_mut()), -1);
         assert!(!proxy_execute_delete(std::ptr::null_mut()));
@@ -143,9 +172,36 @@ unsafe extern "C" {
 
 #[test]
 fn log_callback() {
+    let _lock = log_lock();
     proxy_log_set_error_cb(proxyres_test_log_cb as *const () as *mut c_void);
     log::error!("log callback {}", 42);
     proxy_log_set_error_cb(std::ptr::null_mut());
     let message = borrowed_string(unsafe { proxyres_test_last_message() });
     assert_eq!(message.as_deref(), Some("log callback 42"));
+}
+
+#[test]
+fn log_levels() {
+    let _lock = log_lock();
+    let callback = proxyres_test_log_cb as *const () as *mut c_void;
+    let last_message = || borrowed_string(unsafe { proxyres_test_last_message() });
+    proxy_log_set_warn_cb(callback);
+    proxy_log_set_info_cb(callback);
+    proxy_log_set_debug_cb(callback);
+    assert!(log::log_enabled!(log::Level::Debug));
+    log::warn!("warn {}", 1);
+    assert_eq!(last_message().as_deref(), Some("warn 1"));
+    log::info!("info {}", 2);
+    assert_eq!(last_message().as_deref(), Some("info 2"));
+    log::debug!("debug {}", 3);
+    assert_eq!(last_message().as_deref(), Some("debug 3"));
+
+    proxy_log_set_warn_cb(std::ptr::null_mut());
+    proxy_log_set_info_cb(std::ptr::null_mut());
+    proxy_log_set_debug_cb(std::ptr::null_mut());
+    assert!(!log::log_enabled!(log::Level::Info));
+    // Warnings without a callback are printed instead
+    log::warn!("printed warning");
+    assert_eq!(last_message().as_deref(), Some("debug 3"));
+    log::logger().flush();
 }
