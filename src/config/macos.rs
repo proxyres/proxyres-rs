@@ -5,8 +5,8 @@ use core_foundation_sys::string::CFStringRef;
 
 use super::ConfigBackend;
 #[cfg(target_os = "macos")]
-use crate::cf::cf_dictionary_strings;
-use crate::cf::{CfOwned, cf_dictionary_bool, cf_dictionary_i64, cf_dictionary_string};
+use crate::macos::cf::cf_dictionary_strings;
+use crate::macos::cf::{CfOwned, cf_dictionary_bool, cf_dictionary_i64, cf_dictionary_string};
 
 #[link(name = "CFNetwork", kind = "framework")]
 unsafe extern "C" {

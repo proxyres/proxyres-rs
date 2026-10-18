@@ -7,7 +7,7 @@ use core_foundation_sys::dictionary::CFDictionaryRef;
 use core_foundation_sys::string::CFStringRef;
 
 use super::trim_wpad_url;
-use crate::cf::CfOwned;
+use crate::macos::cf::CfOwned;
 
 const DHCP_OPT_WPAD: u8 = 252;
 

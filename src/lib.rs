@@ -11,9 +11,9 @@ pub mod resolver;
 
 pub use error::Error;
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-mod cf;
 mod fetch;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod macos;
 mod net_adapter;
 mod net_util;
 mod threadpool;

@@ -16,7 +16,7 @@ use core_foundation_sys::string::{CFStringCreateWithBytes, CFStringGetTypeID, CF
 use core_foundation_sys::url::{CFURLCreateWithBytes, CFURLRef};
 
 use super::{Cancel, ResolverBackend, posix};
-use crate::cf::{CfOwned, cf_dictionary_i64, cf_dictionary_string, cf_dictionary_value};
+use crate::macos::cf::{CfOwned, cf_dictionary_i64, cf_dictionary_string, cf_dictionary_value};
 use crate::{Error, config};
 
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(10);
