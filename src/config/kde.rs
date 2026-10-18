@@ -64,7 +64,10 @@ pub(super) struct KdeConfig {
 
 impl KdeConfig {
     pub(super) fn new(desktop_env: DesktopEnv) -> Option<Self> {
-        let config = std::fs::read_to_string(config_path(desktop_env)?).ok()?;
+        Self::from_config(std::fs::read_to_string(config_path(desktop_env)?).ok()?)
+    }
+
+    fn from_config(config: String) -> Option<Self> {
         let kde_config = KdeConfig { config };
         // Use environment variables instead
         if kde_config.proxy_type() == Some(PROXY_TYPE_ENV) {
@@ -140,5 +143,27 @@ mod tests {
             Some("http://127.0.0.1:8080/pac.js")
         );
         assert_eq!(config.proxy("http"), None);
+    }
+
+    #[test]
+    fn proxy_types() {
+        // Environment variables are used instead of the config for ProxyType 4
+        assert!(KdeConfig::from_config("[Proxy Settings]\nProxyType=4\n".into()).is_none());
+        let config = KdeConfig::from_config("[Proxy Settings]\nProxyType=3\n".into());
+        assert!(config.is_some_and(|config| config.auto_discover()));
+    }
+
+    #[test]
+    fn config_paths() {
+        let tests = [
+            (DesktopEnv::Kde3, "share/config/kioslaverc"),
+            (DesktopEnv::Kde4, "share/config/kioslaverc"),
+            (DesktopEnv::Kde5, "kioslaverc"),
+        ];
+        for (desktop_env, suffix) in tests {
+            let path = config_path(desktop_env).expect("no home directory");
+            assert!(path.ends_with(suffix), "{desktop_env:?}: {path:?}");
+        }
+        println!("kde config: {}", KdeConfig::new(DesktopEnv::Kde5).is_some());
     }
 }

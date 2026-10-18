@@ -213,6 +213,9 @@ mod tests {
         println!("auto config url: {:?}", auto_config_url());
         println!("http proxy: {:?}", proxy("http"));
         println!("https proxy: {:?}", proxy("https"));
+        println!("socks proxy: {:?}", proxy("socks"));
+        println!("ftp proxy: {:?}", proxy("ftp"));
+        println!("rtsp proxy: {:?}", proxy("rtsp"));
         println!("bypass list: {:?}", bypass_list());
     }
 }

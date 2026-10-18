@@ -213,3 +213,32 @@ impl ConfigBackend for Gnome3Config {
         (!hosts.is_empty()).then(|| hosts.join(","))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Reads the user's settings without changing them
+    #[test]
+    fn read_settings() {
+        let Some(config) = Gnome3Config::new() else {
+            eprintln!("skipping test without the GSettings proxy schema");
+            return;
+        };
+        let settings = config.settings(PROXY_SCHEMA).expect("no proxy settings");
+        let mode = settings.string("mode").expect("no proxy mode");
+        assert!(["none", "manual", "auto"].contains(&mode.as_str()), "mode: {mode}");
+        println!("use same proxy: {}", settings.boolean("use-same-proxy"));
+        println!("ignore hosts: {:?}", settings.strings("ignore-hosts"));
+        let http = config
+            .settings(&format!("{PROXY_SCHEMA}.http"))
+            .expect("no http settings");
+        println!("http proxy: {:?} {}", http.string("host"), http.int("port"));
+        assert!(config.settings("org.example.does-not-exist").is_none());
+
+        println!("auto discover: {}", config.auto_discover());
+        println!("auto config url: {:?}", config.auto_config_url());
+        println!("proxy: {:?}", config.proxy("https"));
+        println!("bypass list: {:?}", config.bypass_list());
+    }
+}
