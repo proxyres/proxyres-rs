@@ -19,15 +19,17 @@ fn wpad_dhcp_adapter(adapter: &NetAdapter, timeout: Duration) -> Option<String> 
     if let Some(url) = dhcp_windows::wpad_dhcp_adapter(adapter) {
         return Some(url);
     }
-    #[cfg(target_os = "macos")]
-    if let Some(url) = dhcp_macos::wpad_dhcp_primary() {
-        return Some(url);
-    }
     dhcp::wpad_dhcp_adapter(adapter, timeout)
 }
 
 /// Discovers the proxy auto-config url by asking each connected adapter's DHCP server.
 pub(crate) fn wpad_dhcp(timeout: Duration) -> Option<String> {
+    // The lease of the primary service doesn't depend on the adapter
+    #[cfg(target_os = "macos")]
+    if let Some(url) = dhcp_macos::wpad_dhcp_primary() {
+        return Some(url);
+    }
+
     let mut adapters: Vec<NetAdapter> = net_adapters()
         .into_iter()
         .filter(|adapter| adapter.is_connected && adapter.ipv4().is_some())
