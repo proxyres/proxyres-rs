@@ -1,5 +1,7 @@
 # proxyres
 
+[![codecov](https://codecov.io/gh/proxyres/proxyres-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/proxyres/proxyres-rs) [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](https://github.com/proxyres/proxyres-rs/blob/main/LICENSE.md)
+
 Cross-platform proxy resolution for Rust, ported from the C library [proxyres](https://github.com/proxyres/proxyres).
 
 The port is a work in progress. The API may change before the first release.
