@@ -8,6 +8,10 @@ mod dhcp_macos;
 #[cfg(windows)]
 mod dhcp_windows;
 mod dns;
+#[cfg(unix)]
+mod dns_unix;
+#[cfg(windows)]
+mod dns_win;
 
 pub(crate) use dns::wpad_dns;
 
