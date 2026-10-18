@@ -308,6 +308,37 @@ function FindProxyForURL(url, host) {
     }
 
     #[test]
+    fn thrown_value() {
+        let script = "function FindProxyForURL(url, host) { throw 42; }";
+        for engine in engines() {
+            let result = get_proxies_for_url_with(engine, script, "http://a/");
+            assert!(matches!(result, Err(Error::Script(_))), "engine: {engine:?} {result:?}");
+        }
+    }
+
+    #[test]
+    fn undefined_function() {
+        let script = "function FindProxyForURL(url, host) { return notDefined(host); }";
+        for engine in engines() {
+            let result = get_proxies_for_url_with(engine, script, "http://a/");
+            assert!(matches!(result, Err(Error::Script(_))), "engine: {engine:?} {result:?}");
+        }
+    }
+
+    #[test]
+    fn alert() {
+        // Alert accepts any value or none and only logs it
+        let script = r#"function FindProxyForURL(url, host) { alert("hello"); alert(42); alert(); return "DIRECT"; }"#;
+        for engine in engines() {
+            assert_eq!(
+                get_proxies_for_url_with(engine, script, "http://a/").as_deref(),
+                Ok("DIRECT"),
+                "engine: {engine:?}"
+            );
+        }
+    }
+
+    #[test]
     fn non_string_result() {
         let script = "function FindProxyForURL(url, host) { return undefined; }";
         for engine in engines() {
