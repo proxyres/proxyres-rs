@@ -49,7 +49,6 @@ fn system_proxy_settings() -> Option<CfOwned> {
 // Get the enable, host, and port keys for a scheme's proxy settings
 #[cfg(target_os = "macos")]
 fn proxy_keys(scheme: &str) -> (CFStringRef, CFStringRef, CFStringRef) {
-    let scheme = scheme.to_ascii_lowercase();
     // SAFETY: The keys are constant strings exported by CFNetwork.
     unsafe {
         if scheme.starts_with("https") {

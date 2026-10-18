@@ -191,11 +191,7 @@ impl ConfigBackend for Gnome3Config {
             return None;
         }
         let use_same_proxy = self.settings(PROXY_SCHEMA)?.boolean("use-same-proxy");
-        let scheme = if use_same_proxy {
-            "http".to_string()
-        } else {
-            scheme.to_ascii_lowercase()
-        };
+        let scheme = if use_same_proxy { "http" } else { scheme };
         let settings = self.settings(&format!("{PROXY_SCHEMA}.{scheme}"))?;
         let host = settings.string("host").filter(|host| !host.is_empty())?;
         match settings.int("port") {

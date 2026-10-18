@@ -11,6 +11,8 @@
 
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
+use crate::util::url_scheme;
+
 #[cfg(any(all(unix, not(any(target_os = "macos", target_os = "ios"))), test))]
 mod env;
 #[cfg(target_os = "linux")]
@@ -28,7 +30,7 @@ pub(crate) trait ConfigBackend: Send + Sync {
     fn auto_discover(&self) -> bool;
     /// Proxy auto-config (PAC) url.
     fn auto_config_url(&self) -> Option<String>;
-    /// Proxy for a url scheme in the format `host:port`.
+    /// Proxy for a lowercase url scheme in the format `host:port`.
     fn proxy(&self, scheme: &str) -> Option<String>;
     /// Comma-separated proxy bypass list.
     fn bypass_list(&self) -> Option<String>;
@@ -107,14 +109,20 @@ pub fn auto_config_url() -> Option<String> {
     backend()?.auto_config_url()
 }
 
+// Get the lowercase scheme of a scheme or url
+fn normalize_scheme(scheme: &str) -> String {
+    url_scheme(scheme).unwrap_or(scheme).to_ascii_lowercase()
+}
+
 /// Reads the proxy configured on the user's system for a url scheme.
 ///
-/// Values are in the format `host:port` and do not include the scheme.
+/// The scheme of a url is used if a url is passed. Values are in the format `host:port` and do not
+/// include the scheme.
 pub fn proxy(scheme: &str) -> Option<String> {
     if let Some(proxy) = &overrides().proxy {
         return Some(proxy.clone());
     }
-    backend()?.proxy(scheme)
+    backend()?.proxy(&normalize_scheme(scheme))
 }
 
 /// Reads the comma-separated proxy bypass list configured on the user's system.
@@ -179,6 +187,14 @@ mod tests {
         set_proxy_override(None);
         assert!(!auto_discover());
         set_auto_config_url_override(None);
+    }
+
+    #[test]
+    fn normalize_scheme_cases() {
+        assert_eq!(normalize_scheme("http"), "http");
+        assert_eq!(normalize_scheme("HTTPS"), "https");
+        assert_eq!(normalize_scheme("https://example.com/"), "https");
+        assert_eq!(normalize_scheme("SOCKS5://example.com:1080"), "socks5");
     }
 
     #[test]

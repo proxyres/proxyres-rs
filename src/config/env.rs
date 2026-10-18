@@ -18,8 +18,7 @@ fn proxy_env_var(name: &str, check_uppercase: bool, var: impl Fn(&str) -> Option
 fn proxy(scheme: &str, var: impl Fn(&str) -> Option<String>) -> Option<String> {
     // Don't check HTTP_PROXY due to CGI environment variable creation
     // https://everything.curl.dev/usingcurl/proxies/env
-    let check_uppercase = !scheme.eq_ignore_ascii_case("http");
-    proxy_env_var(&format!("{}_proxy", scheme.to_ascii_lowercase()), check_uppercase, var)
+    proxy_env_var(&format!("{scheme}_proxy"), scheme != "http", var)
 }
 
 fn bypass_list(var: impl Fn(&str) -> Option<String>) -> Option<String> {

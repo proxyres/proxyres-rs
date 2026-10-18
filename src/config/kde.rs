@@ -98,8 +98,6 @@ impl ConfigBackend for KdeConfig {
         if self.proxy_type() != Some(PROXY_TYPE_FIXED) {
             return None;
         }
-        // Scheme may be a url
-        let scheme = scheme.split(':').next().unwrap_or(scheme).to_ascii_lowercase();
         self.value(&format!("{scheme}Proxy"))
             .map(|value| normalize_proxy(&value))
     }
@@ -128,7 +126,7 @@ mod tests {
         assert!(!config.auto_discover());
         assert_eq!(config.auto_config_url(), None);
         assert_eq!(config.proxy("http").as_deref(), Some("http://my.proxy1.com:8001"));
-        assert_eq!(config.proxy("HTTPS").as_deref(), Some("my.proxy2.com:8002"));
+        assert_eq!(config.proxy("https").as_deref(), Some("my.proxy2.com:8002"));
         assert_eq!(config.bypass_list().as_deref(), Some("localhost,127.0.0.0/8"));
     }
 
