@@ -7,38 +7,18 @@ use super::ConfigBackend;
 #[cfg(target_os = "macos")]
 use crate::macos::cf::cf_dictionary_strings;
 use crate::macos::cf::{CfOwned, cf_dictionary_bool, cf_dictionary_i64, cf_dictionary_string};
-
-#[link(name = "CFNetwork", kind = "framework")]
-unsafe extern "C" {
-    fn CFNetworkCopySystemProxySettings() -> CFDictionaryRef;
-
-    static kCFNetworkProxiesHTTPEnable: CFStringRef;
-    static kCFNetworkProxiesHTTPProxy: CFStringRef;
-    static kCFNetworkProxiesHTTPPort: CFStringRef;
-    static kCFNetworkProxiesProxyAutoConfigEnable: CFStringRef;
-    static kCFNetworkProxiesProxyAutoConfigURLString: CFStringRef;
-}
-
-// Settings that are only available on macOS
+use crate::macos::cf_network::{
+    CFNetworkCopySystemProxySettings, kCFNetworkProxiesHTTPEnable, kCFNetworkProxiesHTTPPort,
+    kCFNetworkProxiesHTTPProxy, kCFNetworkProxiesProxyAutoConfigEnable, kCFNetworkProxiesProxyAutoConfigURLString,
+};
 #[cfg(target_os = "macos")]
-#[link(name = "CFNetwork", kind = "framework")]
-unsafe extern "C" {
-    static kCFNetworkProxiesHTTPSEnable: CFStringRef;
-    static kCFNetworkProxiesHTTPSProxy: CFStringRef;
-    static kCFNetworkProxiesHTTPSPort: CFStringRef;
-    static kCFNetworkProxiesSOCKSEnable: CFStringRef;
-    static kCFNetworkProxiesSOCKSProxy: CFStringRef;
-    static kCFNetworkProxiesSOCKSPort: CFStringRef;
-    static kCFNetworkProxiesFTPEnable: CFStringRef;
-    static kCFNetworkProxiesFTPProxy: CFStringRef;
-    static kCFNetworkProxiesFTPPort: CFStringRef;
-    static kCFNetworkProxiesRTSPEnable: CFStringRef;
-    static kCFNetworkProxiesRTSPProxy: CFStringRef;
-    static kCFNetworkProxiesRTSPPort: CFStringRef;
-    static kCFNetworkProxiesProxyAutoDiscoveryEnable: CFStringRef;
-    static kCFNetworkProxiesExceptionsList: CFStringRef;
-    static kCFNetworkProxiesExcludeSimpleHostnames: CFStringRef;
-}
+use crate::macos::cf_network::{
+    kCFNetworkProxiesExceptionsList, kCFNetworkProxiesExcludeSimpleHostnames, kCFNetworkProxiesFTPEnable,
+    kCFNetworkProxiesFTPPort, kCFNetworkProxiesFTPProxy, kCFNetworkProxiesHTTPSEnable, kCFNetworkProxiesHTTPSPort,
+    kCFNetworkProxiesHTTPSProxy, kCFNetworkProxiesProxyAutoDiscoveryEnable, kCFNetworkProxiesRTSPEnable,
+    kCFNetworkProxiesRTSPPort, kCFNetworkProxiesRTSPProxy, kCFNetworkProxiesSOCKSEnable, kCFNetworkProxiesSOCKSPort,
+    kCFNetworkProxiesSOCKSProxy,
+};
 
 // Copy the system proxy settings
 fn system_proxy_settings() -> Option<CfOwned> {

@@ -10,52 +10,22 @@ use core_foundation_sys::dictionary::CFDictionaryRef;
 use core_foundation_sys::error::{CFErrorGetCode, CFErrorRef};
 use core_foundation_sys::runloop::{
     CFRunLoopAddSource, CFRunLoopGetCurrent, CFRunLoopRemoveSource, CFRunLoopRunInMode, CFRunLoopSourceInvalidate,
-    CFRunLoopSourceRef, CFRunLoopStop,
+    CFRunLoopStop,
 };
 use core_foundation_sys::string::{CFStringCreateWithBytes, CFStringGetTypeID, CFStringRef, kCFStringEncodingUTF8};
 use core_foundation_sys::url::{CFURLCreateWithBytes, CFURLRef};
 
 use super::{Cancel, ResolverBackend, posix};
 use crate::macos::cf::{CfOwned, cf_dictionary_i64, cf_dictionary_string, cf_dictionary_value};
+use crate::macos::cf_network::{
+    CFNetworkCopyProxiesForAutoConfigurationScript, CFNetworkExecuteProxyAutoConfigurationURL, StreamClientContext,
+    kCFProxyHostNameKey, kCFProxyPortNumberKey, kCFProxyTypeFTP, kCFProxyTypeHTTP, kCFProxyTypeHTTPS, kCFProxyTypeKey,
+    kCFProxyTypeNone, kCFProxyTypeSOCKS,
+};
 use crate::{Error, config};
 
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(10);
 const CANCEL_POLL_INTERVAL: f64 = 0.1;
-
-#[repr(C)]
-struct StreamClientContext {
-    version: CFIndex,
-    info: *mut c_void,
-    retain: Option<extern "C" fn(*const c_void) -> *const c_void>,
-    release: Option<extern "C" fn(*const c_void)>,
-    copy_description: Option<extern "C" fn(*const c_void) -> CFStringRef>,
-}
-
-type AutoConfigurationClientCallback = unsafe extern "C" fn(*mut c_void, CFArrayRef, CFErrorRef);
-
-#[link(name = "CFNetwork", kind = "framework")]
-unsafe extern "C" {
-    fn CFNetworkExecuteProxyAutoConfigurationURL(
-        proxy_auto_config_url: CFURLRef,
-        target_url: CFURLRef,
-        callback: AutoConfigurationClientCallback,
-        client_context: *mut StreamClientContext,
-    ) -> CFRunLoopSourceRef;
-    fn CFNetworkCopyProxiesForAutoConfigurationScript(
-        proxy_auto_configuration_script: CFStringRef,
-        target_url: CFURLRef,
-        error: *mut CFErrorRef,
-    ) -> CFArrayRef;
-
-    static kCFProxyTypeKey: CFStringRef;
-    static kCFProxyHostNameKey: CFStringRef;
-    static kCFProxyPortNumberKey: CFStringRef;
-    static kCFProxyTypeNone: CFStringRef;
-    static kCFProxyTypeHTTP: CFStringRef;
-    static kCFProxyTypeHTTPS: CFStringRef;
-    static kCFProxyTypeSOCKS: CFStringRef;
-    static kCFProxyTypeFTP: CFStringRef;
-}
 
 fn create_string(s: &str) -> Option<CfOwned> {
     // SAFETY: The bytes are valid for the duration of the call and the string is owned by the caller.
