@@ -267,3 +267,52 @@ impl ResolverBackend for WinHttpResolver {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use windows_sys::Win32::Networking::WinHttp::{WINHTTP_INTERNET_SCHEME_HTTP, WINHTTP_PROXY_RESULT_ENTRY};
+
+    use super::*;
+
+    fn entry(scheme: i32, host: &mut [u16], port: u16) -> WINHTTP_PROXY_RESULT_ENTRY {
+        WINHTTP_PROXY_RESULT_ENTRY {
+            fProxy: 1,
+            fBypass: 0,
+            ProxyScheme: scheme,
+            pwszProxy: host.as_mut_ptr(),
+            ProxyPort: port,
+        }
+    }
+
+    #[test]
+    fn convert_entries() {
+        let (mut socks, mut secure, mut files, mut plain) =
+            (to_wide("socks"), to_wide("secure"), to_wide("files"), to_wide("plain"));
+        let mut entries = [
+            entry(WINHTTP_INTERNET_SCHEME_SOCKS, &mut socks, 1080),
+            entry(WINHTTP_INTERNET_SCHEME_HTTPS, &mut secure, 443),
+            entry(WINHTTP_INTERNET_SCHEME_FTP, &mut files, 21),
+            // Entries without a port leave it out
+            entry(WINHTTP_INTERNET_SCHEME_HTTP, &mut plain, 0),
+            // Entries that are not proxies are direct connections
+            WINHTTP_PROXY_RESULT_ENTRY::default(),
+        ];
+        let result = WINHTTP_PROXY_RESULT {
+            cEntries: entries.len() as u32,
+            pEntries: entries.as_mut_ptr(),
+        };
+        assert_eq!(
+            convert_proxy_result(&result),
+            "socks://socks:1080,https://secure:443,ftp://files:21,http://plain,direct://"
+        );
+    }
+
+    #[test]
+    fn convert_empty_result() {
+        let result = WINHTTP_PROXY_RESULT {
+            cEntries: 0,
+            pEntries: ptr::null_mut(),
+        };
+        assert_eq!(convert_proxy_result(&result), "direct://");
+    }
+}

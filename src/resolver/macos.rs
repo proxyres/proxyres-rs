@@ -199,3 +199,23 @@ impl ResolverBackend for MacResolver {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn execute_script() {
+        let script = r#"function FindProxyForURL(url, host) { return "SOCKS socks.example.com:1080; PROXY proxy.example.com:8080; DIRECT"; }"#;
+        assert_eq!(
+            execute_pac_script(script, "http://example.com/").as_deref(),
+            Ok("socks://socks.example.com:1080,http://proxy.example.com:8080,direct://")
+        );
+    }
+
+    #[test]
+    fn execute_invalid_script() {
+        let result = execute_pac_script("function FindProxyForURL(url, host) {", "http://example.com/");
+        assert!(result.is_err(), "{result:?}");
+    }
+}
