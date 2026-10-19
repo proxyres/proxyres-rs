@@ -20,7 +20,7 @@ use windows::Win32::System::Diagnostics::Debug::ActiveScript::{
     IActiveScript, IActiveScriptError, IActiveScriptSite, IActiveScriptSite_Impl, SCRIPTINFO_IUNKNOWN,
     SCRIPTITEM_GLOBALMEMBERS, SCRIPTITEM_ISVISIBLE, SCRIPTSTATE, SCRIPTSTATE_STARTED,
 };
-use windows::Win32::System::Variant::{VAR_CHANGE_FLAGS, VARIANT, VT_BSTR, VT_NULL, VariantChangeType, VariantClear};
+use windows::Win32::System::Variant::{VAR_CHANGE_FLAGS, VARIANT, VT_BSTR, VT_NULL, VariantChangeType};
 use windows::core::{AsImpl, BSTR, GUID, HSTRING, IUnknown, Interface, OutRef, PCWSTR, Ref, implement};
 
 use super::{PAC_UTILS, natives};
@@ -45,51 +45,18 @@ pub(super) fn is_available() -> bool {
     *AVAILABLE.get_or_init(|| unsafe { CLSIDFromProgID(&HSTRING::from("JavaScript")).is_ok() })
 }
 
-// Owned VARIANT cleared when dropped
-struct Variant(VARIANT);
-
-impl Variant {
-    fn null() -> Self {
-        let mut variant = VARIANT::default();
-        // SAFETY: Setting the type of an empty variant to null leaves it valid.
-        unsafe { (*variant.Anonymous.Anonymous).vt = VT_NULL };
-        Variant(variant)
-    }
-
-    fn string(s: &str) -> Self {
-        let mut variant = VARIANT::default();
-        // SAFETY: The variant owns the string and releases it when cleared.
-        unsafe {
-            let inner = &mut *variant.Anonymous.Anonymous;
-            inner.vt = VT_BSTR;
-            inner.Anonymous.bstrVal = ManuallyDrop::new(BSTR::from(s));
-        }
-        Variant(variant)
-    }
-
-    fn into_raw(self) -> VARIANT {
-        let variant = ManuallyDrop::new(self);
-        // SAFETY: Ownership of the variant moves to the caller without clearing it.
-        unsafe { std::ptr::read(&variant.0) }
-    }
-}
-
-impl Drop for Variant {
-    fn drop(&mut self) {
-        // SAFETY: The variant is owned by this wrapper.
-        unsafe {
-            let _ = VariantClear(&mut self.0);
-        }
-    }
+// Null variant, which scripts see as null rather than undefined
+fn null_variant() -> VARIANT {
+    let mut variant = VARIANT::default();
+    // SAFETY: Setting the type of an empty variant to null leaves it valid.
+    unsafe { (*variant.Anonymous.Anonymous).vt = VT_NULL };
+    variant
 }
 
 // Read a variant as a string if it is one
 fn variant_to_string(variant: &VARIANT) -> Option<String> {
     // SAFETY: The string member is only read when the variant holds a string.
-    unsafe {
-        let inner = &variant.Anonymous.Anonymous;
-        (inner.vt == VT_BSTR).then(|| inner.Anonymous.bstrVal.to_string())
-    }
+    (variant.vt() == VT_BSTR).then(|| unsafe { variant.Anonymous.Anonymous.Anonymous.bstrVal.to_string() })
 }
 
 // Convert any variant to a string the way the script engine would
@@ -97,10 +64,10 @@ fn coerce_to_string(variant: &VARIANT) -> String {
     if let Some(s) = variant_to_string(variant) {
         return s;
     }
-    let mut converted = Variant(VARIANT::default());
+    let mut converted = VARIANT::default();
     // SAFETY: The source variant is valid and the destination is owned.
-    match unsafe { VariantChangeType(&mut converted.0, variant, VAR_CHANGE_FLAGS(0), VT_BSTR) } {
-        Ok(()) => variant_to_string(&converted.0).unwrap_or_default(),
+    match unsafe { VariantChangeType(&mut converted, variant, VAR_CHANGE_FLAGS(0), VT_BSTR) } {
+        Ok(()) => variant_to_string(&converted).unwrap_or_default(),
         Err(_) => String::new(),
     }
 }
@@ -180,21 +147,21 @@ impl IDispatch_Impl for Natives_Impl {
         };
         let result = match dispidmember {
             1 => match natives::dns_resolve(&first_arg()?) {
-                Some(address) => Variant::string(&address),
-                None => Variant::null(),
+                Some(address) => VARIANT::from(address.as_str()),
+                None => null_variant(),
             },
-            2 => Variant::string(&natives::dns_resolve_ex(&first_arg()?)),
-            3 => Variant::string(&natives::my_ip_address()),
-            4 => Variant::string(&natives::my_ip_address_ex()),
+            2 => VARIANT::from(natives::dns_resolve_ex(&first_arg()?).as_str()),
+            3 => VARIANT::from(natives::my_ip_address().as_str()),
+            4 => VARIANT::from(natives::my_ip_address_ex().as_str()),
             5 => {
                 natives::alert(&first_arg().unwrap_or_default());
-                Variant::null()
+                null_variant()
             }
             _ => return Err(DISP_E_MEMBERNOTFOUND.into()),
         };
         // SAFETY: The result pointer is null or points to a variant owned by the engine.
         if let Some(pvarresult) = unsafe { pvarresult.as_mut() } {
-            *pvarresult = result.into_raw();
+            *pvarresult = result;
         }
         Ok(())
     }
@@ -375,14 +342,14 @@ impl Engine {
                 .map_err(|_| Error::Script("FindProxyForURL is not a function".to_string()))?;
 
             // Arguments are passed in reverse order
-            let mut args = [Variant::string(host), Variant::string(url)];
+            let mut args = [VARIANT::from(host), VARIANT::from(url)];
             let params = DISPPARAMS {
-                rgvarg: args.as_mut_ptr() as *mut VARIANT,
+                rgvarg: args.as_mut_ptr(),
                 rgdispidNamedArgs: std::ptr::null_mut(),
                 cArgs: args.len() as u32,
                 cNamedArgs: 0,
             };
-            let mut result = Variant(VARIANT::default());
+            let mut result = VARIANT::default();
             let mut excep_info = EXCEPINFO::default();
             dispatch
                 .Invoke(
@@ -391,12 +358,12 @@ impl Engine {
                     0,
                     DISPATCH_METHOD,
                     &params,
-                    Some(&mut result.0),
+                    Some(&mut result),
                     Some(&mut excep_info),
                     None,
                 )
                 .map_err(|error| self.script_error(error, Some(&mut excep_info)))?;
-            variant_to_string(&result.0)
+            variant_to_string(&result)
                 .ok_or_else(|| Error::Script("FindProxyForURL did not return a string".to_string()))
         }
     }
