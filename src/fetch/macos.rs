@@ -113,7 +113,7 @@ fn request(url: &str, deadline: Instant) -> Result<Response, String> {
             kCFAllocatorDefault,
             method.as_ptr() as CFStringRef,
             cf_url.as_ptr() as CFURLRef,
-            kCFHTTPVersion1_1,
+            kCFHTTPVersion1_1.as_ptr(),
         )
     } as CFTypeRef)
     .ok_or("unable to create request")?;
@@ -155,11 +155,11 @@ fn request(url: &str, deadline: Instant) -> Result<Response, String> {
         // Redirects are followed by fetch_get so their scheme can be checked
         CFReadStreamSetProperty(
             stream,
-            kCFStreamPropertyHTTPShouldAutoredirect,
+            kCFStreamPropertyHTTPShouldAutoredirect.as_ptr(),
             kCFBooleanFalse as CFTypeRef,
         );
         // Download the PAC script directly, since the proxy can depend on the script itself
-        CFReadStreamSetProperty(stream, kCFStreamPropertyHTTPProxy, no_proxy.as_ptr());
+        CFReadStreamSetProperty(stream, kCFStreamPropertyHTTPProxy.as_ptr(), no_proxy.as_ptr());
         let events = kCFStreamEventHasBytesAvailable | kCFStreamEventEndEncountered | kCFStreamEventErrorOccurred;
         CFReadStreamSetClient(
             stream,
@@ -179,7 +179,10 @@ fn request(url: &str, deadline: Instant) -> Result<Response, String> {
                 break;
             }
         }
-        let response = CfOwned::new(CFReadStreamCopyProperty(stream, kCFStreamPropertyHTTPResponseHeader));
+        let response = CfOwned::new(CFReadStreamCopyProperty(
+            stream,
+            kCFStreamPropertyHTTPResponseHeader.as_ptr(),
+        ));
         CFReadStreamUnscheduleFromRunLoop(stream, run_loop, mode);
         CFReadStreamClose(stream);
         response

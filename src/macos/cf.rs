@@ -4,8 +4,8 @@ use std::ffi::{CStr, c_char, c_void};
 
 #[cfg(target_os = "macos")]
 use core_foundation_sys::array::{CFArrayGetCount, CFArrayGetTypeID, CFArrayGetValueAtIndex, CFArrayRef};
-use core_foundation_sys::base::{CFGetTypeID, CFIndex, CFRelease, CFTypeRef, kCFAllocatorDefault};
-use core_foundation_sys::dictionary::{CFDictionaryGetValueIfPresent, CFDictionaryRef};
+use core_foundation_sys::base::{CFGetTypeID, CFIndex, CFRelease, CFTypeID, CFTypeRef, kCFAllocatorDefault};
+use core_foundation_sys::dictionary::{CFDictionaryGetTypeID, CFDictionaryGetValueIfPresent, CFDictionaryRef};
 use core_foundation_sys::number::{CFNumberGetTypeID, CFNumberGetValue, CFNumberRef, kCFNumberSInt64Type};
 use core_foundation_sys::string::{
     CFStringCreateWithBytes, CFStringGetCString, CFStringGetCStringPtr, CFStringGetLength,
@@ -31,6 +31,16 @@ impl Drop for CfOwned {
     fn drop(&mut self) {
         // SAFETY: The object is owned by this wrapper.
         unsafe { CFRelease(self.0) };
+    }
+}
+
+/// Constant string exported by a framework, which safe code can't create.
+#[repr(transparent)]
+pub(crate) struct CfConstString(CFStringRef);
+
+impl CfConstString {
+    pub(crate) fn as_ptr(&self) -> CFStringRef {
+        self.0
     }
 }
 
@@ -97,47 +107,35 @@ pub(crate) unsafe fn cf_string_to_string(string: CFStringRef) -> Option<String> 
 }
 
 /// Gets a value from a dictionary if it is of the expected type.
-///
-/// # Safety
-///
-/// The dictionary and key must be valid.
-pub(crate) unsafe fn cf_dictionary_value(
-    dictionary: CFDictionaryRef,
-    key: CFStringRef,
-    type_id: usize,
-) -> Option<CFTypeRef> {
+pub(crate) fn cf_dictionary_value(dictionary: &CfOwned, key: &CfConstString, type_id: CFTypeID) -> Option<CFTypeRef> {
     let mut value: *const c_void = std::ptr::null();
-    // SAFETY: The caller guarantees the dictionary and key are valid.
+    // SAFETY: The object is only read as a dictionary when it is one, and the key is a constant string.
     unsafe {
-        if CFDictionaryGetValueIfPresent(dictionary, key as *const c_void, &mut value) == 0 || value.is_null() {
+        let object = dictionary.as_ptr();
+        if CFGetTypeID(object) != CFDictionaryGetTypeID()
+            || CFDictionaryGetValueIfPresent(object as CFDictionaryRef, key.as_ptr() as *const c_void, &mut value) == 0
+            || value.is_null()
+        {
             return None;
         }
-        (CFGetTypeID(value) == type_id as _).then_some(value)
+        (CFGetTypeID(value) == type_id).then_some(value)
     }
 }
 
 /// Gets a string value from a dictionary.
-///
-/// # Safety
-///
-/// The dictionary and key must be valid.
-pub(crate) unsafe fn cf_dictionary_string(dictionary: CFDictionaryRef, key: CFStringRef) -> Option<String> {
-    // SAFETY: The caller guarantees the dictionary and key are valid.
+pub(crate) fn cf_dictionary_string(dictionary: &CfOwned, key: &CfConstString) -> Option<String> {
+    // SAFETY: The value is a string owned by the dictionary.
     unsafe {
-        let value = cf_dictionary_value(dictionary, key, CFStringGetTypeID() as usize)?;
+        let value = cf_dictionary_value(dictionary, key, CFStringGetTypeID())?;
         cf_string_to_string(value as CFStringRef)
     }
 }
 
 /// Gets a number value from a dictionary.
-///
-/// # Safety
-///
-/// The dictionary and key must be valid.
-pub(crate) unsafe fn cf_dictionary_i64(dictionary: CFDictionaryRef, key: CFStringRef) -> Option<i64> {
-    // SAFETY: The caller guarantees the dictionary and key are valid.
+pub(crate) fn cf_dictionary_i64(dictionary: &CfOwned, key: &CfConstString) -> Option<i64> {
+    // SAFETY: The value is a number owned by the dictionary.
     unsafe {
-        let value = cf_dictionary_value(dictionary, key, CFNumberGetTypeID() as usize)?;
+        let value = cf_dictionary_value(dictionary, key, CFNumberGetTypeID())?;
         let mut number: i64 = 0;
         CFNumberGetValue(
             value as CFNumberRef,
@@ -149,25 +147,16 @@ pub(crate) unsafe fn cf_dictionary_i64(dictionary: CFDictionaryRef, key: CFStrin
 }
 
 /// Gets whether a number value in a dictionary is present and non-zero.
-///
-/// # Safety
-///
-/// The dictionary and key must be valid.
-pub(crate) unsafe fn cf_dictionary_bool(dictionary: CFDictionaryRef, key: CFStringRef) -> bool {
-    // SAFETY: The caller guarantees the dictionary and key are valid.
-    unsafe { cf_dictionary_i64(dictionary, key).is_some_and(|value| value != 0) }
+pub(crate) fn cf_dictionary_bool(dictionary: &CfOwned, key: &CfConstString) -> bool {
+    cf_dictionary_i64(dictionary, key).is_some_and(|value| value != 0)
 }
 
 /// Gets an array of strings from a dictionary.
-///
-/// # Safety
-///
-/// The dictionary and key must be valid.
 #[cfg(target_os = "macos")]
-pub(crate) unsafe fn cf_dictionary_strings(dictionary: CFDictionaryRef, key: CFStringRef) -> Vec<String> {
-    // SAFETY: The caller guarantees the dictionary and key are valid.
+pub(crate) fn cf_dictionary_strings(dictionary: &CfOwned, key: &CfConstString) -> Vec<String> {
+    // SAFETY: The value is an array owned by the dictionary, and only its strings are read.
     unsafe {
-        let Some(array) = cf_dictionary_value(dictionary, key, CFArrayGetTypeID() as usize) else {
+        let Some(array) = cf_dictionary_value(dictionary, key, CFArrayGetTypeID()) else {
             return Vec::new();
         };
         let array = array as CFArrayRef;

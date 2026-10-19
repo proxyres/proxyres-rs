@@ -6,8 +6,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use core_foundation_sys::array::{CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef};
-use core_foundation_sys::base::{CFEqual, CFRelease, CFTypeRef};
-use core_foundation_sys::dictionary::CFDictionaryRef;
+use core_foundation_sys::base::{CFEqual, CFRelease, CFRetain, CFTypeRef};
 use core_foundation_sys::error::{CFErrorGetCode, CFErrorRef};
 use core_foundation_sys::runloop::{
     CFRunLoopAddSource, CFRunLoopGetCurrent, CFRunLoopRemoveSource, CFRunLoopRunInMode, CFRunLoopSourceInvalidate,
@@ -18,7 +17,8 @@ use core_foundation_sys::url::CFURLRef;
 
 use super::{Cancel, ResolverBackend, posix};
 use crate::macos::cf::{
-    CfOwned, cf_dictionary_i64, cf_dictionary_string, cf_dictionary_value, cf_string_create, cf_url_create,
+    CfConstString, CfOwned, cf_dictionary_i64, cf_dictionary_string, cf_dictionary_value, cf_string_create,
+    cf_url_create,
 };
 use crate::macos::cf_network::{
     CFNetworkExecuteProxyAutoConfigurationScript, CFNetworkExecuteProxyAutoConfigurationURL, StreamClientContext,
@@ -47,30 +47,34 @@ unsafe fn convert_proxy_array(proxies: CFArrayRef) -> String {
     // SAFETY: The caller passes a valid array of proxy dictionaries.
     unsafe {
         for i in 0..CFArrayGetCount(proxies) {
-            let proxy = CFArrayGetValueAtIndex(proxies, i) as CFDictionaryRef;
+            let proxy = CFArrayGetValueAtIndex(proxies, i);
             if proxy.is_null() {
                 continue;
             }
-            let Some(proxy_type) = cf_dictionary_value(proxy, kCFProxyTypeKey, CFStringGetTypeID() as usize) else {
+            // Hold a reference so the dictionary can be read like an owned one
+            let Some(proxy) = CfOwned::new(CFRetain(proxy)) else {
                 continue;
             };
-            let is_type = |other: CFStringRef| CFEqual(proxy_type, other as CFTypeRef) != 0;
-            let scheme = if is_type(kCFProxyTypeNone) {
+            let Some(proxy_type) = cf_dictionary_value(&proxy, &kCFProxyTypeKey, CFStringGetTypeID()) else {
+                continue;
+            };
+            let is_type = |other: &CfConstString| CFEqual(proxy_type, other.as_ptr() as CFTypeRef) != 0;
+            let scheme = if is_type(&kCFProxyTypeNone) {
                 uris.push("direct://".to_string());
                 continue;
-            } else if is_type(kCFProxyTypeHTTP) || is_type(kCFProxyTypeHTTPS) {
+            } else if is_type(&kCFProxyTypeHTTP) || is_type(&kCFProxyTypeHTTPS) {
                 // An HTTPS proxy on macOS is an HTTP proxy that uses CONNECT for https urls
                 "http"
-            } else if is_type(kCFProxyTypeSOCKS) {
+            } else if is_type(&kCFProxyTypeSOCKS) {
                 "socks"
-            } else if is_type(kCFProxyTypeFTP) {
+            } else if is_type(&kCFProxyTypeFTP) {
                 "ftp"
             } else {
                 log::warn!("Unknown proxy type encountered");
                 continue;
             };
-            let host = cf_dictionary_string(proxy, kCFProxyHostNameKey).unwrap_or_default();
-            match cf_dictionary_i64(proxy, kCFProxyPortNumberKey) {
+            let host = cf_dictionary_string(&proxy, &kCFProxyHostNameKey).unwrap_or_default();
+            match cf_dictionary_i64(&proxy, &kCFProxyPortNumberKey) {
                 Some(port) => uris.push(format!("{scheme}://{host}:{port}")),
                 None => uris.push(format!("{scheme}://{host}")),
             }
