@@ -5,36 +5,25 @@ use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use libloading::Library;
 
 use super::ConfigBackend;
+use crate::dylib::dylib_api;
 
 const PROXY_SCHEMA: &str = "org.gnome.system.proxy";
 
-type GFree = unsafe extern "C" fn(*mut c_void);
-type GStrfreev = unsafe extern "C" fn(*mut *mut c_char);
-type GObjectUnref = unsafe extern "C" fn(*mut c_void);
-type GSettingsNew = unsafe extern "C" fn(*const c_char) -> *mut c_void;
-type GSettingsGetString = unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_char;
-type GSettingsGetInt = unsafe extern "C" fn(*mut c_void, *const c_char) -> c_int;
-type GSettingsGetStrv = unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut *mut c_char;
-type GSettingsGetBoolean = unsafe extern "C" fn(*mut c_void, *const c_char) -> c_int;
-type GSettingsSchemaSourceGetDefault = unsafe extern "C" fn() -> *mut c_void;
-type GSettingsSchemaSourceLookup = unsafe extern "C" fn(*mut c_void, *const c_char, c_int) -> *mut c_void;
-type GSettingsSchemaUnref = unsafe extern "C" fn(*mut c_void);
-
-pub(super) struct Gnome3Config {
-    // Libraries must outlive the function pointers resolved from them
-    _glib: Library,
-    _gio: Library,
-    g_free: GFree,
-    g_strfreev: GStrfreev,
-    g_object_unref: GObjectUnref,
-    g_settings_new: GSettingsNew,
-    g_settings_get_string: GSettingsGetString,
-    g_settings_get_int: GSettingsGetInt,
-    g_settings_get_strv: GSettingsGetStrv,
-    g_settings_get_boolean: GSettingsGetBoolean,
-    g_settings_schema_source_get_default: GSettingsSchemaSourceGetDefault,
-    g_settings_schema_source_lookup: GSettingsSchemaSourceLookup,
-    g_settings_schema_unref: GSettingsSchemaUnref,
+// GLib and GObject functions are resolved through GIO, which depends on them
+dylib_api! {
+    pub(super) struct Gnome3Config {
+        fn g_free(*mut c_void);
+        fn g_strfreev(*mut *mut c_char);
+        fn g_object_unref(*mut c_void);
+        fn g_settings_new(*const c_char) -> *mut c_void;
+        fn g_settings_get_string(*mut c_void, *const c_char) -> *mut c_char;
+        fn g_settings_get_int(*mut c_void, *const c_char) -> c_int;
+        fn g_settings_get_strv(*mut c_void, *const c_char) -> *mut *mut c_char;
+        fn g_settings_get_boolean(*mut c_void, *const c_char) -> c_int;
+        fn g_settings_schema_source_get_default() -> *mut c_void;
+        fn g_settings_schema_source_lookup(*mut c_void, *const c_char, c_int) -> *mut c_void;
+        fn g_settings_schema_unref(*mut c_void);
+    }
 }
 
 // Owned GSettings object
@@ -106,27 +95,9 @@ impl Drop for Settings<'_> {
 
 impl Gnome3Config {
     pub(super) fn new() -> Option<Self> {
-        // SAFETY: The libraries are loaded by soname and the symbols are resolved with the
-        // signatures documented by GLib and GIO.
-        let config = unsafe {
-            let glib = Library::new("libglib-2.0.so.0").ok()?;
-            let gio = Library::new("libgio-2.0.so.0").ok()?;
-            Gnome3Config {
-                g_free: *glib.get(b"g_free\0").ok()?,
-                g_strfreev: *glib.get(b"g_strfreev\0").ok()?,
-                g_object_unref: *gio.get(b"g_object_unref\0").ok()?,
-                g_settings_new: *gio.get(b"g_settings_new\0").ok()?,
-                g_settings_get_string: *gio.get(b"g_settings_get_string\0").ok()?,
-                g_settings_get_int: *gio.get(b"g_settings_get_int\0").ok()?,
-                g_settings_get_strv: *gio.get(b"g_settings_get_strv\0").ok()?,
-                g_settings_get_boolean: *gio.get(b"g_settings_get_boolean\0").ok()?,
-                g_settings_schema_source_get_default: *gio.get(b"g_settings_schema_source_get_default\0").ok()?,
-                g_settings_schema_source_lookup: *gio.get(b"g_settings_schema_source_lookup\0").ok()?,
-                g_settings_schema_unref: *gio.get(b"g_settings_schema_unref\0").ok()?,
-                _glib: glib,
-                _gio: gio,
-            }
-        };
+        // SAFETY: GIO is loaded by soname and the functions are declared with the signatures
+        // documented by GLib and GIO.
+        let config = unsafe { Gnome3Config::resolve(Library::new("libgio-2.0.so.0").ok()?)? };
         if !config.has_schema(PROXY_SCHEMA) {
             log::debug!("GSettings schema {PROXY_SCHEMA} is not installed");
             return None;

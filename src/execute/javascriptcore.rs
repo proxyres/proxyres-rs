@@ -7,6 +7,7 @@ use libloading::Library;
 
 use super::{PAC_UTILS, natives};
 use crate::Error;
+use crate::dylib::dylib_api;
 
 const FRAMEWORK_PATH: &str = "/System/Library/Frameworks/JavaScriptCore.framework/JavaScriptCore";
 
@@ -25,75 +26,49 @@ type CallAsFunctionCallback = unsafe extern "C" fn(
     *mut JSValueRef,
 ) -> JSValueRef;
 
-struct Api {
-    // The framework is never unloaded because threads in its address space may still run
-    _library: Library,
-    global_context_create: unsafe extern "C" fn(*mut c_void) -> JSGlobalContextRef,
-    global_context_release: unsafe extern "C" fn(JSGlobalContextRef),
-    context_get_global_object: unsafe extern "C" fn(JSContextRef) -> JSObjectRef,
-    string_create_with_utf8_cstring: unsafe extern "C" fn(*const c_char) -> JSStringRef,
-    string_release: unsafe extern "C" fn(JSStringRef),
-    string_get_maximum_utf8_cstring_size: unsafe extern "C" fn(JSStringRef) -> usize,
-    string_get_utf8_cstring: unsafe extern "C" fn(JSStringRef, *mut c_char, usize) -> usize,
-    evaluate_script:
-        unsafe extern "C" fn(JSContextRef, JSStringRef, JSObjectRef, JSStringRef, i32, *mut JSValueRef) -> JSValueRef,
-    object_make_function_with_callback:
-        unsafe extern "C" fn(JSContextRef, JSStringRef, CallAsFunctionCallback) -> JSObjectRef,
-    object_set_property: unsafe extern "C" fn(JSContextRef, JSObjectRef, JSStringRef, JSValueRef, u32, *mut JSValueRef),
-    object_get_property: unsafe extern "C" fn(JSContextRef, JSObjectRef, JSStringRef, *mut JSValueRef) -> JSValueRef,
-    object_is_function: unsafe extern "C" fn(JSContextRef, JSObjectRef) -> bool,
-    object_call_as_function: unsafe extern "C" fn(
-        JSContextRef,
-        JSObjectRef,
-        JSObjectRef,
-        usize,
-        *const JSValueRef,
-        *mut JSValueRef,
-    ) -> JSValueRef,
-    value_is_object: unsafe extern "C" fn(JSContextRef, JSValueRef) -> bool,
-    value_is_string: unsafe extern "C" fn(JSContextRef, JSValueRef) -> bool,
-    value_to_object: unsafe extern "C" fn(JSContextRef, JSValueRef, *mut JSValueRef) -> JSObjectRef,
-    value_to_string_copy: unsafe extern "C" fn(JSContextRef, JSValueRef, *mut JSValueRef) -> JSStringRef,
-    value_make_string: unsafe extern "C" fn(JSContextRef, JSStringRef) -> JSValueRef,
-    value_make_null: unsafe extern "C" fn(JSContextRef) -> JSValueRef,
+dylib_api! {
+    struct Api {
+        fn JSGlobalContextCreate(*mut c_void) -> JSGlobalContextRef;
+        fn JSGlobalContextRelease(JSGlobalContextRef);
+        fn JSContextGetGlobalObject(JSContextRef) -> JSObjectRef;
+        fn JSStringCreateWithUTF8CString(*const c_char) -> JSStringRef;
+        fn JSStringRelease(JSStringRef);
+        fn JSStringGetMaximumUTF8CStringSize(JSStringRef) -> usize;
+        fn JSStringGetUTF8CString(JSStringRef, *mut c_char, usize) -> usize;
+        fn JSEvaluateScript(JSContextRef, JSStringRef, JSObjectRef, JSStringRef, i32, *mut JSValueRef) -> JSValueRef;
+        fn JSObjectMakeFunctionWithCallback(JSContextRef, JSStringRef, CallAsFunctionCallback) -> JSObjectRef;
+        fn JSObjectSetProperty(JSContextRef, JSObjectRef, JSStringRef, JSValueRef, u32, *mut JSValueRef);
+        fn JSObjectGetProperty(JSContextRef, JSObjectRef, JSStringRef, *mut JSValueRef) -> JSValueRef;
+        fn JSObjectIsFunction(JSContextRef, JSObjectRef) -> bool;
+        fn JSObjectCallAsFunction(
+            JSContextRef,
+            JSObjectRef,
+            JSObjectRef,
+            usize,
+            *const JSValueRef,
+            *mut JSValueRef,
+        ) -> JSValueRef;
+        fn JSValueIsObject(JSContextRef, JSValueRef) -> bool;
+        fn JSValueIsString(JSContextRef, JSValueRef) -> bool;
+        fn JSValueToObject(JSContextRef, JSValueRef, *mut JSValueRef) -> JSObjectRef;
+        fn JSValueToStringCopy(JSContextRef, JSValueRef, *mut JSValueRef) -> JSStringRef;
+        fn JSValueMakeString(JSContextRef, JSStringRef) -> JSValueRef;
+        fn JSValueMakeNull(JSContextRef) -> JSValueRef;
+    }
 }
 
 impl Api {
     fn load() -> Option<Self> {
-        // SAFETY: The framework is loaded from its system path and the symbols are resolved with
-        // the signatures declared in the JavaScriptCore headers.
-        unsafe {
-            let library = Library::new(FRAMEWORK_PATH).ok()?;
-            Some(Api {
-                global_context_create: *library.get(b"JSGlobalContextCreate\0").ok()?,
-                global_context_release: *library.get(b"JSGlobalContextRelease\0").ok()?,
-                context_get_global_object: *library.get(b"JSContextGetGlobalObject\0").ok()?,
-                string_create_with_utf8_cstring: *library.get(b"JSStringCreateWithUTF8CString\0").ok()?,
-                string_release: *library.get(b"JSStringRelease\0").ok()?,
-                string_get_maximum_utf8_cstring_size: *library.get(b"JSStringGetMaximumUTF8CStringSize\0").ok()?,
-                string_get_utf8_cstring: *library.get(b"JSStringGetUTF8CString\0").ok()?,
-                evaluate_script: *library.get(b"JSEvaluateScript\0").ok()?,
-                object_make_function_with_callback: *library.get(b"JSObjectMakeFunctionWithCallback\0").ok()?,
-                object_set_property: *library.get(b"JSObjectSetProperty\0").ok()?,
-                object_get_property: *library.get(b"JSObjectGetProperty\0").ok()?,
-                object_is_function: *library.get(b"JSObjectIsFunction\0").ok()?,
-                object_call_as_function: *library.get(b"JSObjectCallAsFunction\0").ok()?,
-                value_is_object: *library.get(b"JSValueIsObject\0").ok()?,
-                value_is_string: *library.get(b"JSValueIsString\0").ok()?,
-                value_to_object: *library.get(b"JSValueToObject\0").ok()?,
-                value_to_string_copy: *library.get(b"JSValueToStringCopy\0").ok()?,
-                value_make_string: *library.get(b"JSValueMakeString\0").ok()?,
-                value_make_null: *library.get(b"JSValueMakeNull\0").ok()?,
-                _library: library,
-            })
-        }
+        // SAFETY: The framework is loaded from its system path and the functions are declared with
+        // the signatures in the JavaScriptCore headers.
+        unsafe { Api::resolve(Library::new(FRAMEWORK_PATH).ok()?) }
     }
 
     // Create a JavaScript string from a Rust string
     fn string(&self, s: &str) -> Result<JsString<'_>, Error> {
         let s = CString::new(s).map_err(|_| Error::Script("string contains a null character".to_string()))?;
         // SAFETY: The string is null-terminated.
-        let ptr = unsafe { (self.string_create_with_utf8_cstring)(s.as_ptr()) };
+        let ptr = unsafe { (self.JSStringCreateWithUTF8CString)(s.as_ptr()) };
         if ptr.is_null() {
             return Err(Error::Script("unable to create string".to_string()));
         }
@@ -104,7 +79,7 @@ impl Api {
     unsafe fn value_to_string(&self, context: JSContextRef, value: JSValueRef) -> Option<String> {
         // SAFETY: The caller passes a valid context and value.
         unsafe {
-            let string = (self.value_to_string_copy)(context, value, std::ptr::null_mut());
+            let string = (self.JSValueToStringCopy)(context, value, std::ptr::null_mut());
             if string.is_null() {
                 return None;
             }
@@ -115,6 +90,7 @@ impl Api {
 }
 
 fn api() -> Option<&'static Api> {
+    // The framework is never unloaded because threads in its address space may still run
     static API: OnceLock<Option<Api>> = OnceLock::new();
     API.get_or_init(Api::load).as_ref()
 }
@@ -134,9 +110,9 @@ impl JsString<'_> {
     fn to_rust(&self) -> String {
         // SAFETY: The buffer is sized by JSStringGetMaximumUTF8CStringSize.
         unsafe {
-            let size = (self.api.string_get_maximum_utf8_cstring_size)(self.ptr);
+            let size = (self.api.JSStringGetMaximumUTF8CStringSize)(self.ptr);
             let mut buffer = vec![0u8; size.max(1)];
-            (self.api.string_get_utf8_cstring)(self.ptr, buffer.as_mut_ptr() as *mut c_char, buffer.len());
+            (self.api.JSStringGetUTF8CString)(self.ptr, buffer.as_mut_ptr() as *mut c_char, buffer.len());
             CStr::from_ptr(buffer.as_ptr() as *const c_char)
                 .to_string_lossy()
                 .into_owned()
@@ -147,7 +123,7 @@ impl JsString<'_> {
 impl Drop for JsString<'_> {
     fn drop(&mut self) {
         // SAFETY: The string is owned by this wrapper.
-        unsafe { (self.api.string_release)(self.ptr) };
+        unsafe { (self.api.JSStringRelease)(self.ptr) };
     }
 }
 
@@ -160,7 +136,7 @@ struct Context<'a> {
 impl Drop for Context<'_> {
     fn drop(&mut self) {
         // SAFETY: The context is owned by this wrapper.
-        unsafe { (self.api.global_context_release)(self.ptr) };
+        unsafe { (self.api.JSGlobalContextRelease)(self.ptr) };
     }
 }
 
@@ -178,8 +154,8 @@ unsafe fn make_string(api: &Api, context: JSContextRef, s: Option<String>) -> JS
     // SAFETY: The context is valid during the native function call.
     unsafe {
         match s.and_then(|s| api.string(&s).ok()) {
-            Some(string) => (api.value_make_string)(context, string.ptr),
-            None => (api.value_make_null)(context),
+            Some(string) => (api.JSValueMakeString)(context, string.ptr),
+            None => (api.JSValueMakeNull)(context),
         }
     }
 }
@@ -264,7 +240,7 @@ unsafe extern "C" fn alert(
     // SAFETY: The arguments are provided by JavaScriptCore.
     unsafe {
         natives::alert(&first_arg(api, context, argc, argv).unwrap_or_default());
-        (api.value_make_null)(context)
+        (api.JSValueMakeNull)(context)
     }
 }
 
@@ -281,7 +257,7 @@ fn evaluate(api: &Api, context: JSContextRef, code: &str) -> Result<(), Error> {
     let mut exception: JSValueRef = std::ptr::null();
     // SAFETY: The context and script are valid.
     unsafe {
-        (api.evaluate_script)(
+        (api.JSEvaluateScript)(
             context,
             code.ptr,
             std::ptr::null_mut(),
@@ -303,12 +279,12 @@ pub(super) fn find_proxy_for_url(script: &str, url: &str, host: &str) -> Result<
     // SAFETY: Each object is created and released through the loaded framework and the natives
     // match the callback signature.
     unsafe {
-        let ptr = (api.global_context_create)(std::ptr::null_mut());
+        let ptr = (api.JSGlobalContextCreate)(std::ptr::null_mut());
         if ptr.is_null() {
             return Err(Error::Script("unable to create context".to_string()));
         }
         let context = Context { api, ptr };
-        let global = (api.context_get_global_object)(context.ptr);
+        let global = (api.JSContextGetGlobalObject)(context.ptr);
 
         // Register native functions with the engine
         let functions: [(&str, CallAsFunctionCallback); 5] = [
@@ -320,11 +296,11 @@ pub(super) fn find_proxy_for_url(script: &str, url: &str, host: &str) -> Result<
         ];
         for (name, callback) in functions {
             let name = api.string(name)?;
-            let function = (api.object_make_function_with_callback)(context.ptr, name.ptr, callback);
+            let function = (api.JSObjectMakeFunctionWithCallback)(context.ptr, name.ptr, callback);
             if function.is_null() {
                 return Err(Error::Script(format!("unable to register {}", name.to_rust())));
             }
-            (api.object_set_property)(context.ptr, global, name.ptr, function, 0, std::ptr::null_mut());
+            (api.JSObjectSetProperty)(context.ptr, global, name.ptr, function, 0, std::ptr::null_mut());
         }
 
         // Load Mozilla's PAC helper functions and the PAC script
@@ -332,12 +308,12 @@ pub(super) fn find_proxy_for_url(script: &str, url: &str, host: &str) -> Result<
         evaluate(api, context.ptr, script)?;
 
         let name = api.string("FindProxyForURL")?;
-        let value = (api.object_get_property)(context.ptr, global, name.ptr, std::ptr::null_mut());
-        let function = match (api.value_is_object)(context.ptr, value) {
-            true => (api.value_to_object)(context.ptr, value, std::ptr::null_mut()),
+        let value = (api.JSObjectGetProperty)(context.ptr, global, name.ptr, std::ptr::null_mut());
+        let function = match (api.JSValueIsObject)(context.ptr, value) {
+            true => (api.JSValueToObject)(context.ptr, value, std::ptr::null_mut()),
             false => std::ptr::null_mut(),
         };
-        if function.is_null() || !(api.object_is_function)(context.ptr, function) {
+        if function.is_null() || !(api.JSObjectIsFunction)(context.ptr, function) {
             return Err(Error::Script("FindProxyForURL is not a function".to_string()));
         }
 
@@ -345,11 +321,11 @@ pub(super) fn find_proxy_for_url(script: &str, url: &str, host: &str) -> Result<
         let url = api.string(url)?;
         let host = api.string(host)?;
         let args = [
-            (api.value_make_string)(context.ptr, url.ptr),
-            (api.value_make_string)(context.ptr, host.ptr),
+            (api.JSValueMakeString)(context.ptr, url.ptr),
+            (api.JSValueMakeString)(context.ptr, host.ptr),
         ];
         let mut exception: JSValueRef = std::ptr::null();
-        let result = (api.object_call_as_function)(
+        let result = (api.JSObjectCallAsFunction)(
             context.ptr,
             function,
             std::ptr::null_mut(),
@@ -360,7 +336,7 @@ pub(super) fn find_proxy_for_url(script: &str, url: &str, host: &str) -> Result<
         if !exception.is_null() {
             return Err(script_error(api, context.ptr, exception));
         }
-        if result.is_null() || !(api.value_is_string)(context.ptr, result) {
+        if result.is_null() || !(api.JSValueIsString)(context.ptr, result) {
             return Err(Error::Script("FindProxyForURL did not return a string".to_string()));
         }
         api.value_to_string(context.ptr, result)

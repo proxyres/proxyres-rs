@@ -7,6 +7,7 @@ use libloading::Library;
 
 use super::{PAC_UTILS, natives};
 use crate::Error;
+use crate::dylib::dylib_api;
 
 // Versions of JavaScriptCoreGTK in order of preference
 const LIBRARY_NAMES: [&str; 3] = [
@@ -18,48 +19,33 @@ const LIBRARY_NAMES: [&str; 3] = [
 // Fundamental GLib types
 const G_TYPE_STRING: usize = 16 << 2;
 
-type GObjectUnref = unsafe extern "C" fn(*mut c_void);
-type GFree = unsafe extern "C" fn(*mut c_void);
-type GStrdup = unsafe extern "C" fn(*const c_char) -> *mut c_char;
-type ContextNew = unsafe extern "C" fn() -> *mut c_void;
-type ContextEvaluate = unsafe extern "C" fn(*mut c_void, *const c_char, isize) -> *mut c_void;
-type ContextGetException = unsafe extern "C" fn(*mut c_void) -> *mut c_void;
-type ContextSetValue = unsafe extern "C" fn(*mut c_void, *const c_char, *mut c_void);
-type ContextGetValue = unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void;
-type ValueNewFunctionv = unsafe extern "C" fn(
-    *mut c_void,
-    *const c_char,
-    *const c_void,
-    *mut c_void,
-    *const c_void,
-    usize,
-    c_uint,
-    *const usize,
-) -> *mut c_void;
-type ValueNewString = unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void;
-type ValueIs = unsafe extern "C" fn(*mut c_void) -> c_int;
-type ValueFunctionCallv = unsafe extern "C" fn(*mut c_void, c_uint, *const *mut c_void) -> *mut c_void;
-type ValueToString = unsafe extern "C" fn(*mut c_void) -> *mut c_char;
-type ExceptionGetMessage = unsafe extern "C" fn(*mut c_void) -> *const c_char;
-
-struct Api {
-    // The library is never unloaded because threads in its address space may still run
-    _library: Library,
-    g_object_unref: GObjectUnref,
-    g_free: GFree,
-    g_strdup: GStrdup,
-    jsc_context_new: ContextNew,
-    jsc_context_evaluate: ContextEvaluate,
-    jsc_context_get_exception: ContextGetException,
-    jsc_context_set_value: ContextSetValue,
-    jsc_context_get_value: ContextGetValue,
-    jsc_value_new_functionv: ValueNewFunctionv,
-    jsc_value_new_string: ValueNewString,
-    jsc_value_is_function: ValueIs,
-    jsc_value_is_string: ValueIs,
-    jsc_value_function_callv: ValueFunctionCallv,
-    jsc_value_to_string: ValueToString,
-    jsc_exception_get_message: ExceptionGetMessage,
+dylib_api! {
+    struct Api {
+        fn g_object_unref(*mut c_void);
+        fn g_free(*mut c_void);
+        fn g_strdup(*const c_char) -> *mut c_char;
+        fn jsc_context_new() -> *mut c_void;
+        fn jsc_context_evaluate(*mut c_void, *const c_char, isize) -> *mut c_void;
+        fn jsc_context_get_exception(*mut c_void) -> *mut c_void;
+        fn jsc_context_set_value(*mut c_void, *const c_char, *mut c_void);
+        fn jsc_context_get_value(*mut c_void, *const c_char) -> *mut c_void;
+        fn jsc_value_new_functionv(
+            *mut c_void,
+            *const c_char,
+            *const c_void,
+            *mut c_void,
+            *const c_void,
+            usize,
+            c_uint,
+            *const usize,
+        ) -> *mut c_void;
+        fn jsc_value_new_string(*mut c_void, *const c_char) -> *mut c_void;
+        fn jsc_value_is_function(*mut c_void) -> c_int;
+        fn jsc_value_is_string(*mut c_void) -> c_int;
+        fn jsc_value_function_callv(*mut c_void, c_uint, *const *mut c_void) -> *mut c_void;
+        fn jsc_value_to_string(*mut c_void) -> *mut c_char;
+        fn jsc_exception_get_message(*mut c_void) -> *const c_char;
+    }
 }
 
 // Load JavaScriptCoreGTK, preferring a version that is already loaded by the process
@@ -80,32 +66,14 @@ fn load_library() -> Option<Library> {
 impl Api {
     fn load() -> Option<Self> {
         let library = load_library()?;
-        // SAFETY: The symbols are resolved with the signatures documented by JavaScriptCoreGTK and
-        // GLib, which is loaded as a dependency.
-        unsafe {
-            Some(Api {
-                g_object_unref: *library.get(b"g_object_unref\0").ok()?,
-                g_free: *library.get(b"g_free\0").ok()?,
-                g_strdup: *library.get(b"g_strdup\0").ok()?,
-                jsc_context_new: *library.get(b"jsc_context_new\0").ok()?,
-                jsc_context_evaluate: *library.get(b"jsc_context_evaluate\0").ok()?,
-                jsc_context_get_exception: *library.get(b"jsc_context_get_exception\0").ok()?,
-                jsc_context_set_value: *library.get(b"jsc_context_set_value\0").ok()?,
-                jsc_context_get_value: *library.get(b"jsc_context_get_value\0").ok()?,
-                jsc_value_new_functionv: *library.get(b"jsc_value_new_functionv\0").ok()?,
-                jsc_value_new_string: *library.get(b"jsc_value_new_string\0").ok()?,
-                jsc_value_is_function: *library.get(b"jsc_value_is_function\0").ok()?,
-                jsc_value_is_string: *library.get(b"jsc_value_is_string\0").ok()?,
-                jsc_value_function_callv: *library.get(b"jsc_value_function_callv\0").ok()?,
-                jsc_value_to_string: *library.get(b"jsc_value_to_string\0").ok()?,
-                jsc_exception_get_message: *library.get(b"jsc_exception_get_message\0").ok()?,
-                _library: library,
-            })
-        }
+        // SAFETY: The functions are declared with the signatures documented by JavaScriptCoreGTK
+        // and GLib, which is loaded as a dependency.
+        unsafe { Api::resolve(library) }
     }
 }
 
 fn api() -> Option<&'static Api> {
+    // The library is never unloaded because threads in its address space may still run
     static API: OnceLock<Option<Api>> = OnceLock::new();
     API.get_or_init(Api::load).as_ref()
 }
