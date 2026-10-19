@@ -11,7 +11,7 @@ Cross-platform proxy resolution for Rust with support for Linux, macOS, iOS, & W
 * Resolve the proxies for a url asynchronously using `WinHTTP` on Windows and `CFNetwork` on macOS and iOS.
 * Or use the built-in resolver, which supports:
   * WPAD discovery using DHCP and DNS, which can start in the background at startup.
-  * Downloading PAC scripts using HTTP, or HTTPS with the `https` feature.
+  * Downloading PAC scripts using HTTP, or HTTPS using CFNetwork on macOS and iOS and the `https` feature elsewhere.
 * Handle multiple simultaneous resolution requests with a thread pool.
 * C API compatible with the C library's headers.
 * Example command line utility, `proxycli`.
@@ -71,7 +71,7 @@ let list = proxyres::execute::get_proxies_for_url(script, "https://example.com/"
 |Name|Description|Default|
 |:-|:-|:-:|
 |`quickjs`|Execute PAC scripts with the bundled QuickJS engine instead of the system engine, with memory and time limits. Adds about 1.2 MB and requires Rust 1.87.|off|
-|`https`|Download PAC scripts using HTTPS with [ureq](https://github.com/algesten/ureq), verified with the operating system's certificate store. Without it, PAC scripts are downloaded using HTTP 1.0.|off|
+|`https`|Download PAC scripts using HTTPS with [ureq](https://github.com/algesten/ureq) on Linux and Windows, verified with the operating system's certificate store. Without it, PAC scripts are downloaded using HTTP 1.0. macOS and iOS always download PAC scripts using CFNetwork, which supports HTTPS.|off|
 
 ## Command line
 

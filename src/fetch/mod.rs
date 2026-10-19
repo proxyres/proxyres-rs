@@ -1,4 +1,4 @@
-//! Download PAC scripts using HTTP.
+//! Download PAC scripts using HTTP, or HTTPS on macOS and iOS and with the `https` feature.
 
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -10,6 +10,9 @@ use crate::util::{SCRIPT_MAX, split_host_port, strip_ipv6_brackets, url_host, ur
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
 const HEADER_MAX: usize = 64 * 1024;
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod macos;
 
 fn fetch_error(url: &str, reason: impl std::fmt::Display) -> Error {
     Error::Fetch(format!("{url}: {reason}"))
@@ -57,14 +60,17 @@ fn connect(host: &str, port: u16) -> std::io::Result<TcpStream> {
 
 /// Downloads a PAC script.
 pub(crate) fn fetch_get(url: &str) -> Result<String, Error> {
-    #[cfg(feature = "https")]
+    // CFNetwork supports HTTPS without a TLS dependency
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    return macos::fetch_get(url);
+    #[cfg(all(feature = "https", not(any(target_os = "macos", target_os = "ios"))))]
     return fetch_ureq(url);
-    #[cfg(not(feature = "https"))]
+    #[cfg(not(any(feature = "https", target_os = "macos", target_os = "ios")))]
     fetch_http(url)
 }
 
 /// Downloads a PAC script using HTTP or HTTPS, following redirects.
-#[cfg(feature = "https")]
+#[cfg(all(feature = "https", not(any(target_os = "macos", target_os = "ios"))))]
 fn fetch_ureq(url: &str) -> Result<String, Error> {
     use ureq::tls::{RootCerts, TlsConfig};
 
@@ -94,7 +100,7 @@ fn fetch_ureq(url: &str) -> Result<String, Error> {
 }
 
 /// Downloads a PAC script using HTTP 1.0.
-#[cfg_attr(feature = "https", allow(dead_code))]
+#[cfg_attr(any(feature = "https", target_os = "macos", target_os = "ios"), allow(dead_code))]
 fn fetch_http(url: &str) -> Result<String, Error> {
     if !url_scheme(url).unwrap_or("http").eq_ignore_ascii_case("http") {
         return Err(fetch_error(url, "only http is supported"));
@@ -197,7 +203,7 @@ pub(crate) mod tests {
         format!("http://127.0.0.1:{port}/wpad.dat")
     }
 
-    fn response(status: &str, headers: &str, body: &str) -> Vec<u8> {
+    pub(crate) fn response(status: &str, headers: &str, body: &str) -> Vec<u8> {
         format!("HTTP/1.0 {status}\r\n{headers}\r\n{body}").into_bytes()
     }
 

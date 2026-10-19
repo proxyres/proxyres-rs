@@ -3,10 +3,11 @@
 use std::ffi::c_void;
 
 use core_foundation_sys::array::CFArrayRef;
-use core_foundation_sys::base::CFIndex;
+use core_foundation_sys::base::{CFAllocatorRef, CFIndex};
 use core_foundation_sys::dictionary::CFDictionaryRef;
 use core_foundation_sys::error::CFErrorRef;
 use core_foundation_sys::runloop::CFRunLoopSourceRef;
+use core_foundation_sys::stream::CFReadStreamRef;
 use core_foundation_sys::string::CFStringRef;
 use core_foundation_sys::url::CFURLRef;
 
@@ -20,6 +21,8 @@ pub(crate) struct StreamClientContext {
 }
 
 type AutoConfigurationClientCallback = unsafe extern "C" fn(*mut c_void, CFArrayRef, CFErrorRef);
+
+pub(crate) type CFHTTPMessageRef = *mut c_void;
 
 #[link(name = "CFNetwork", kind = "framework")]
 unsafe extern "C" {
@@ -51,6 +54,30 @@ unsafe extern "C" {
     pub(crate) static kCFProxyTypeHTTPS: CFStringRef;
     pub(crate) static kCFProxyTypeSOCKS: CFStringRef;
     pub(crate) static kCFProxyTypeFTP: CFStringRef;
+
+    pub(crate) fn CFHTTPMessageCreateRequest(
+        alloc: CFAllocatorRef,
+        request_method: CFStringRef,
+        url: CFURLRef,
+        http_version: CFStringRef,
+    ) -> CFHTTPMessageRef;
+    pub(crate) fn CFHTTPMessageSetHeaderFieldValue(
+        message: CFHTTPMessageRef,
+        header_field: CFStringRef,
+        value: CFStringRef,
+    );
+    pub(crate) fn CFHTTPMessageCopyHeaderFieldValue(
+        message: CFHTTPMessageRef,
+        header_field: CFStringRef,
+    ) -> CFStringRef;
+    pub(crate) fn CFHTTPMessageGetResponseStatusCode(response: CFHTTPMessageRef) -> CFIndex;
+    pub(crate) fn CFReadStreamCreateForHTTPRequest(alloc: CFAllocatorRef, request: CFHTTPMessageRef)
+    -> CFReadStreamRef;
+
+    pub(crate) static kCFHTTPVersion1_1: CFStringRef;
+    pub(crate) static kCFStreamPropertyHTTPResponseHeader: CFStringRef;
+    pub(crate) static kCFStreamPropertyHTTPShouldAutoredirect: CFStringRef;
+    pub(crate) static kCFStreamPropertyHTTPProxy: CFStringRef;
 }
 
 // Settings that are only available on macOS
