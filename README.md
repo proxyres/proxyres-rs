@@ -2,12 +2,12 @@
 
 [![codecov](https://codecov.io/gh/proxyres/proxyres-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/proxyres/proxyres-rs) [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](https://github.com/proxyres/proxyres-rs/blob/main/LICENSE.md)
 
-Cross-platform proxy resolution for Rust, ported from the C library [proxyres](https://github.com/proxyres/proxyres).
+Cross-platform proxy resolution for Rust with support for Linux, macOS, iOS, & Windows, ported from the C library [proxyres](https://github.com/proxyres/proxyres).
 
 ## Features
 
 * Read the user's proxy configuration from the operating system.
-* Execute proxy auto-config (PAC) scripts with `JavaScriptCore`, `Windows Script Host`, or the bundled [QuickJS](https://github.com/quickjs-ng/quickjs) engine.
+* Execute proxy auto-config (PAC) scripts with `JavaScriptCore`, `Windows Script Host`, or the [QuickJS](https://github.com/quickjs-ng/quickjs) engine, optionally bundled with the `quickjs` feature.
 * Resolve the proxies for a url asynchronously using `WinHTTP` on Windows and `CFNetwork` on macOS and iOS.
 * Or use the built-in resolver, which supports:
   * WPAD discovery using DHCP and DNS, which can start in the background at startup.
