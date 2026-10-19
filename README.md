@@ -38,8 +38,6 @@ Script engines are loaded at run-time, and the bundled QuickJS engine is used in
 
 Building requires Rust 1.85 or later, or Rust 1.87 with the `quickjs` feature flag. The C API crate also needs a C compiler.
 
-CI runs on Windows Server 2025, macOS 26, the iOS simulator, and Ubuntu 22.04, 24.04, and 26.04.
-
 ## Example
 
 ```rust
