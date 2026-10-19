@@ -177,7 +177,7 @@ fn execute() {
 #[link(name = "proxyres_capi_test_log", kind = "static")]
 unsafe extern "C" {
     fn proxyres_test_log_cb();
-    fn proxyres_test_last_message() -> *const c_char;
+    safe fn proxyres_test_last_message() -> *const c_char;
 }
 
 #[test]
@@ -186,7 +186,7 @@ fn log_callback() {
     proxy_log_set_error_cb(proxyres_test_log_cb as *const () as *mut c_void);
     log::error!("log callback {}", 42);
     proxy_log_set_error_cb(std::ptr::null_mut());
-    let message = borrowed_string(unsafe { proxyres_test_last_message() });
+    let message = borrowed_string(proxyres_test_last_message());
     assert_eq!(message.as_deref(), Some("log callback 42"));
 }
 
@@ -194,7 +194,7 @@ fn log_callback() {
 fn log_levels() {
     let _lock = log_lock();
     let callback = proxyres_test_log_cb as *const () as *mut c_void;
-    let last_message = || borrowed_string(unsafe { proxyres_test_last_message() });
+    let last_message = || borrowed_string(proxyres_test_last_message());
     proxy_log_set_warn_cb(callback);
     proxy_log_set_info_cb(callback);
     proxy_log_set_debug_cb(callback);

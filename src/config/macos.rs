@@ -22,46 +22,42 @@ use crate::macos::cf_network::{
 
 // Copy the system proxy settings
 fn system_proxy_settings() -> Option<CfOwned> {
-    // SAFETY: The copied dictionary is owned by the caller.
-    CfOwned::new(unsafe { CFNetworkCopySystemProxySettings() } as _)
+    CfOwned::new(CFNetworkCopySystemProxySettings() as _)
 }
 
 // Get the enable, host, and port keys for a scheme's proxy settings
 #[cfg(target_os = "macos")]
 fn proxy_keys(scheme: &str) -> (CFStringRef, CFStringRef, CFStringRef) {
-    // SAFETY: The keys are constant strings exported by CFNetwork.
-    unsafe {
-        if scheme.starts_with("https") {
-            (
-                kCFNetworkProxiesHTTPSEnable,
-                kCFNetworkProxiesHTTPSProxy,
-                kCFNetworkProxiesHTTPSPort,
-            )
-        } else if scheme.starts_with("socks") {
-            (
-                kCFNetworkProxiesSOCKSEnable,
-                kCFNetworkProxiesSOCKSProxy,
-                kCFNetworkProxiesSOCKSPort,
-            )
-        } else if scheme.starts_with("ftp") {
-            (
-                kCFNetworkProxiesFTPEnable,
-                kCFNetworkProxiesFTPProxy,
-                kCFNetworkProxiesFTPPort,
-            )
-        } else if scheme.starts_with("rtsp") {
-            (
-                kCFNetworkProxiesRTSPEnable,
-                kCFNetworkProxiesRTSPProxy,
-                kCFNetworkProxiesRTSPPort,
-            )
-        } else {
-            (
-                kCFNetworkProxiesHTTPEnable,
-                kCFNetworkProxiesHTTPProxy,
-                kCFNetworkProxiesHTTPPort,
-            )
-        }
+    if scheme.starts_with("https") {
+        (
+            kCFNetworkProxiesHTTPSEnable,
+            kCFNetworkProxiesHTTPSProxy,
+            kCFNetworkProxiesHTTPSPort,
+        )
+    } else if scheme.starts_with("socks") {
+        (
+            kCFNetworkProxiesSOCKSEnable,
+            kCFNetworkProxiesSOCKSProxy,
+            kCFNetworkProxiesSOCKSPort,
+        )
+    } else if scheme.starts_with("ftp") {
+        (
+            kCFNetworkProxiesFTPEnable,
+            kCFNetworkProxiesFTPProxy,
+            kCFNetworkProxiesFTPPort,
+        )
+    } else if scheme.starts_with("rtsp") {
+        (
+            kCFNetworkProxiesRTSPEnable,
+            kCFNetworkProxiesRTSPProxy,
+            kCFNetworkProxiesRTSPPort,
+        )
+    } else {
+        (
+            kCFNetworkProxiesHTTPEnable,
+            kCFNetworkProxiesHTTPProxy,
+            kCFNetworkProxiesHTTPPort,
+        )
     }
 }
 
@@ -69,14 +65,11 @@ fn proxy_keys(scheme: &str) -> (CFStringRef, CFStringRef, CFStringRef) {
 #[cfg(target_os = "ios")]
 fn proxy_keys(_scheme: &str) -> (CFStringRef, CFStringRef, CFStringRef) {
     // iOS only has settings for an HTTP proxy, which is used for all schemes
-    // SAFETY: The keys are constant strings exported by CFNetwork.
-    unsafe {
-        (
-            kCFNetworkProxiesHTTPEnable,
-            kCFNetworkProxiesHTTPProxy,
-            kCFNetworkProxiesHTTPPort,
-        )
-    }
+    (
+        kCFNetworkProxiesHTTPEnable,
+        kCFNetworkProxiesHTTPProxy,
+        kCFNetworkProxiesHTTPPort,
+    )
 }
 
 pub(super) struct MacConfig;

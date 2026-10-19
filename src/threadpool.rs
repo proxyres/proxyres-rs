@@ -28,7 +28,7 @@ pub(crate) static POOL: ThreadPool = ThreadPool::new(MAX_THREADS);
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[link(name = "objc")]
 unsafe extern "C" {
-    fn objc_autoreleasePoolPush() -> *mut std::ffi::c_void;
+    safe fn objc_autoreleasePoolPush() -> *mut std::ffi::c_void;
     fn objc_autoreleasePoolPop(pool: *mut std::ffi::c_void);
 }
 
@@ -36,8 +36,7 @@ unsafe extern "C" {
 fn run_job(job: Job) {
     // The implicit autorelease pool of a thread on macOS doesn't drain until the thread exits
     #[cfg(any(target_os = "macos", target_os = "ios"))]
-    // SAFETY: The pool is pushed and popped on the same thread.
-    let pool = unsafe { objc_autoreleasePoolPush() };
+    let pool = objc_autoreleasePoolPush();
 
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)).is_err() {
         log::error!("Thread pool job panicked");

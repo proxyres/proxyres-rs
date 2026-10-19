@@ -26,7 +26,7 @@ pub(crate) type CFHTTPMessageRef = *mut c_void;
 
 #[link(name = "CFNetwork", kind = "framework")]
 unsafe extern "C" {
-    pub(crate) fn CFNetworkCopySystemProxySettings() -> CFDictionaryRef;
+    pub(crate) safe fn CFNetworkCopySystemProxySettings() -> CFDictionaryRef;
     pub(crate) fn CFNetworkExecuteProxyAutoConfigurationURL(
         proxy_auto_config_url: CFURLRef,
         target_url: CFURLRef,
@@ -40,20 +40,20 @@ unsafe extern "C" {
         client_context: *mut StreamClientContext,
     ) -> CFRunLoopSourceRef;
 
-    pub(crate) static kCFNetworkProxiesHTTPEnable: CFStringRef;
-    pub(crate) static kCFNetworkProxiesHTTPProxy: CFStringRef;
-    pub(crate) static kCFNetworkProxiesHTTPPort: CFStringRef;
-    pub(crate) static kCFNetworkProxiesProxyAutoConfigEnable: CFStringRef;
-    pub(crate) static kCFNetworkProxiesProxyAutoConfigURLString: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesHTTPEnable: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesHTTPProxy: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesHTTPPort: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesProxyAutoConfigEnable: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesProxyAutoConfigURLString: CFStringRef;
 
-    pub(crate) static kCFProxyTypeKey: CFStringRef;
-    pub(crate) static kCFProxyHostNameKey: CFStringRef;
-    pub(crate) static kCFProxyPortNumberKey: CFStringRef;
-    pub(crate) static kCFProxyTypeNone: CFStringRef;
-    pub(crate) static kCFProxyTypeHTTP: CFStringRef;
-    pub(crate) static kCFProxyTypeHTTPS: CFStringRef;
-    pub(crate) static kCFProxyTypeSOCKS: CFStringRef;
-    pub(crate) static kCFProxyTypeFTP: CFStringRef;
+    pub(crate) safe static kCFProxyTypeKey: CFStringRef;
+    pub(crate) safe static kCFProxyHostNameKey: CFStringRef;
+    pub(crate) safe static kCFProxyPortNumberKey: CFStringRef;
+    pub(crate) safe static kCFProxyTypeNone: CFStringRef;
+    pub(crate) safe static kCFProxyTypeHTTP: CFStringRef;
+    pub(crate) safe static kCFProxyTypeHTTPS: CFStringRef;
+    pub(crate) safe static kCFProxyTypeSOCKS: CFStringRef;
+    pub(crate) safe static kCFProxyTypeFTP: CFStringRef;
 
     pub(crate) fn CFHTTPMessageCreateRequest(
         alloc: CFAllocatorRef,
@@ -74,29 +74,29 @@ unsafe extern "C" {
     pub(crate) fn CFReadStreamCreateForHTTPRequest(alloc: CFAllocatorRef, request: CFHTTPMessageRef)
     -> CFReadStreamRef;
 
-    pub(crate) static kCFHTTPVersion1_1: CFStringRef;
-    pub(crate) static kCFStreamPropertyHTTPResponseHeader: CFStringRef;
-    pub(crate) static kCFStreamPropertyHTTPShouldAutoredirect: CFStringRef;
-    pub(crate) static kCFStreamPropertyHTTPProxy: CFStringRef;
+    pub(crate) safe static kCFHTTPVersion1_1: CFStringRef;
+    pub(crate) safe static kCFStreamPropertyHTTPResponseHeader: CFStringRef;
+    pub(crate) safe static kCFStreamPropertyHTTPShouldAutoredirect: CFStringRef;
+    pub(crate) safe static kCFStreamPropertyHTTPProxy: CFStringRef;
 }
 
 // Settings that are only available on macOS
 #[cfg(target_os = "macos")]
 #[link(name = "CFNetwork", kind = "framework")]
 unsafe extern "C" {
-    pub(crate) static kCFNetworkProxiesHTTPSEnable: CFStringRef;
-    pub(crate) static kCFNetworkProxiesHTTPSProxy: CFStringRef;
-    pub(crate) static kCFNetworkProxiesHTTPSPort: CFStringRef;
-    pub(crate) static kCFNetworkProxiesSOCKSEnable: CFStringRef;
-    pub(crate) static kCFNetworkProxiesSOCKSProxy: CFStringRef;
-    pub(crate) static kCFNetworkProxiesSOCKSPort: CFStringRef;
-    pub(crate) static kCFNetworkProxiesFTPEnable: CFStringRef;
-    pub(crate) static kCFNetworkProxiesFTPProxy: CFStringRef;
-    pub(crate) static kCFNetworkProxiesFTPPort: CFStringRef;
-    pub(crate) static kCFNetworkProxiesRTSPEnable: CFStringRef;
-    pub(crate) static kCFNetworkProxiesRTSPProxy: CFStringRef;
-    pub(crate) static kCFNetworkProxiesRTSPPort: CFStringRef;
-    pub(crate) static kCFNetworkProxiesProxyAutoDiscoveryEnable: CFStringRef;
-    pub(crate) static kCFNetworkProxiesExceptionsList: CFStringRef;
-    pub(crate) static kCFNetworkProxiesExcludeSimpleHostnames: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesHTTPSEnable: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesHTTPSProxy: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesHTTPSPort: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesSOCKSEnable: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesSOCKSProxy: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesSOCKSPort: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesFTPEnable: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesFTPProxy: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesFTPPort: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesRTSPEnable: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesRTSPProxy: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesRTSPPort: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesProxyAutoDiscoveryEnable: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesExceptionsList: CFStringRef;
+    pub(crate) safe static kCFNetworkProxiesExcludeSimpleHostnames: CFStringRef;
 }
