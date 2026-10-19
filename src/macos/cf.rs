@@ -4,13 +4,14 @@ use std::ffi::{CStr, c_char, c_void};
 
 #[cfg(target_os = "macos")]
 use core_foundation_sys::array::{CFArrayGetCount, CFArrayGetTypeID, CFArrayGetValueAtIndex, CFArrayRef};
-use core_foundation_sys::base::{CFGetTypeID, CFRelease, CFTypeRef};
+use core_foundation_sys::base::{CFGetTypeID, CFIndex, CFRelease, CFTypeRef, kCFAllocatorDefault};
 use core_foundation_sys::dictionary::{CFDictionaryGetValueIfPresent, CFDictionaryRef};
 use core_foundation_sys::number::{CFNumberGetTypeID, CFNumberGetValue, CFNumberRef, kCFNumberSInt64Type};
 use core_foundation_sys::string::{
-    CFStringGetCString, CFStringGetCStringPtr, CFStringGetLength, CFStringGetMaximumSizeForEncoding, CFStringGetTypeID,
-    CFStringRef, kCFStringEncodingUTF8,
+    CFStringCreateWithBytes, CFStringGetCString, CFStringGetCStringPtr, CFStringGetLength,
+    CFStringGetMaximumSizeForEncoding, CFStringGetTypeID, CFStringRef, kCFStringEncodingUTF8,
 };
+use core_foundation_sys::url::CFURLCreateWithBytes;
 
 /// Core Foundation object released when dropped.
 pub(crate) struct CfOwned(CFTypeRef);
@@ -31,6 +32,34 @@ impl Drop for CfOwned {
         // SAFETY: The object is owned by this wrapper.
         unsafe { CFRelease(self.0) };
     }
+}
+
+/// Creates a string from a Rust string.
+pub(crate) fn cf_string_create(s: &str) -> Option<CfOwned> {
+    // SAFETY: The bytes are valid for the duration of the call and the string is owned by the caller.
+    CfOwned::new(unsafe {
+        CFStringCreateWithBytes(
+            kCFAllocatorDefault,
+            s.as_ptr(),
+            s.len() as CFIndex,
+            kCFStringEncodingUTF8,
+            0,
+        )
+    } as CFTypeRef)
+}
+
+/// Creates a url from a Rust string.
+pub(crate) fn cf_url_create(url: &str) -> Option<CfOwned> {
+    // SAFETY: The bytes are valid for the duration of the call and the url is owned by the caller.
+    CfOwned::new(unsafe {
+        CFURLCreateWithBytes(
+            kCFAllocatorDefault,
+            url.as_ptr(),
+            url.len() as CFIndex,
+            kCFStringEncodingUTF8,
+            std::ptr::null(),
+        )
+    } as CFTypeRef)
 }
 
 /// Converts a string to a Rust string.

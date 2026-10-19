@@ -6,18 +6,20 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use core_foundation_sys::array::{CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef};
-use core_foundation_sys::base::{CFEqual, CFIndex, CFRelease, CFTypeRef, kCFAllocatorDefault};
+use core_foundation_sys::base::{CFEqual, CFRelease, CFTypeRef};
 use core_foundation_sys::dictionary::CFDictionaryRef;
 use core_foundation_sys::error::{CFErrorGetCode, CFErrorRef};
 use core_foundation_sys::runloop::{
     CFRunLoopAddSource, CFRunLoopGetCurrent, CFRunLoopRemoveSource, CFRunLoopRunInMode, CFRunLoopSourceInvalidate,
     CFRunLoopSourceRef, CFRunLoopStop,
 };
-use core_foundation_sys::string::{CFStringCreateWithBytes, CFStringGetTypeID, CFStringRef, kCFStringEncodingUTF8};
-use core_foundation_sys::url::{CFURLCreateWithBytes, CFURLRef};
+use core_foundation_sys::string::{CFStringGetTypeID, CFStringRef};
+use core_foundation_sys::url::CFURLRef;
 
 use super::{Cancel, ResolverBackend, posix};
-use crate::macos::cf::{CfOwned, cf_dictionary_i64, cf_dictionary_string, cf_dictionary_value};
+use crate::macos::cf::{
+    CfOwned, cf_dictionary_i64, cf_dictionary_string, cf_dictionary_value, cf_string_create, cf_url_create,
+};
 use crate::macos::cf_network::{
     CFNetworkExecuteProxyAutoConfigurationScript, CFNetworkExecuteProxyAutoConfigurationURL, StreamClientContext,
     kCFProxyHostNameKey, kCFProxyPortNumberKey, kCFProxyTypeFTP, kCFProxyTypeHTTP, kCFProxyTypeHTTPS, kCFProxyTypeKey,
@@ -35,31 +37,8 @@ fn pac_lock() -> MutexGuard<'static, ()> {
     LOCK.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn create_string(s: &str) -> Option<CfOwned> {
-    // SAFETY: The bytes are valid for the duration of the call and the string is owned by the caller.
-    CfOwned::new(unsafe {
-        CFStringCreateWithBytes(
-            kCFAllocatorDefault,
-            s.as_ptr(),
-            s.len() as CFIndex,
-            kCFStringEncodingUTF8,
-            0,
-        )
-    } as CFTypeRef)
-}
-
 fn create_url(url: &str) -> Result<CfOwned, Error> {
-    // SAFETY: The bytes are valid for the duration of the call and the url is owned by the caller.
-    let cf_url = unsafe {
-        CFURLCreateWithBytes(
-            kCFAllocatorDefault,
-            url.as_ptr(),
-            url.len() as CFIndex,
-            kCFStringEncodingUTF8,
-            std::ptr::null(),
-        )
-    };
-    CfOwned::new(cf_url as CFTypeRef).ok_or_else(|| Error::Script(format!("invalid url {url}")))
+    cf_url_create(url).ok_or_else(|| Error::Script(format!("invalid url {url}")))
 }
 
 // Convert an array of proxy dictionaries into a uri list
@@ -122,7 +101,7 @@ fn execute_pac_source(
     cancel: &Cancel,
     create_source: impl FnOnce(*mut StreamClientContext) -> CFRunLoopSourceRef,
 ) -> Result<String, Error> {
-    let mode = create_string("proxyres.run_loop").ok_or(Error::Os(libc::ENOMEM))?;
+    let mode = cf_string_create("proxyres.run_loop").ok_or(Error::Os(libc::ENOMEM))?;
 
     let result: RefCell<Option<Result<String, Error>>> = RefCell::new(None);
     let mut context = StreamClientContext {
@@ -177,7 +156,7 @@ fn execute_pac_url(auto_config_url: &str, url: &str, cancel: &Cancel) -> Result<
 
 // Execute a PAC script using the current thread's run loop
 fn execute_pac_script(script: &str, url: &str, cancel: &Cancel) -> Result<String, Error> {
-    let script_string = create_string(script).ok_or_else(|| Error::Script("invalid script".to_string()))?;
+    let script_string = cf_string_create(script).ok_or_else(|| Error::Script("invalid script".to_string()))?;
     let target_url = create_url(url)?;
     execute_pac_source("script", cancel, |context| {
         // SAFETY: The script, url and context outlive the source.
