@@ -1,4 +1,4 @@
-# proxyres
+# proxyres-rs
 
 [![codecov](https://codecov.io/gh/proxyres/proxyres-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/proxyres/proxyres-rs) [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](https://github.com/proxyres/proxyres-rs/blob/main/LICENSE.md)
 
