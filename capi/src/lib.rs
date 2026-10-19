@@ -276,7 +276,7 @@ unsafe fn resolver<'a>(ctx: *mut c_void) -> Option<&'a mut ProxyResolver> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn proxy_resolver_get_proxies_for_url(ctx: *mut c_void, url: *const c_char) -> bool {
     // SAFETY: The caller guarantees the arguments are valid.
-    let (Some(resolver), Some(url)) = (unsafe { resolver(ctx) }, unsafe { from_c_str(url) }) else {
+    let (Some(resolver), Some(url)) = (unsafe { (resolver(ctx), from_c_str(url)) }) else {
         return false;
     };
     resolver.list = None;
@@ -429,9 +429,8 @@ pub unsafe extern "C" fn proxy_execute_get_proxies_for_url(
     url: *const c_char,
 ) -> bool {
     // SAFETY: The caller guarantees the arguments are valid.
-    let (Some(executor), Some(script), Some(url)) = (unsafe { executor(ctx) }, unsafe { from_c_str(script) }, unsafe {
-        from_c_str(url)
-    }) else {
+    let (Some(executor), Some(script), Some(url)) = (unsafe { (executor(ctx), from_c_str(script), from_c_str(url)) })
+    else {
         return false;
     };
     match execute::get_proxies_for_url(&script, &url) {
