@@ -165,11 +165,11 @@ unsafe extern "C" fn dns_resolve_ex(host: *const c_char, _user_data: *mut c_void
     return_string(Some(natives::dns_resolve_ex(&unsafe { arg_string(host) })))
 }
 
-unsafe extern "C" fn my_ip_address(_user_data: *mut c_void) -> *mut c_char {
+extern "C" fn my_ip_address(_user_data: *mut c_void) -> *mut c_char {
     return_string(Some(natives::my_ip_address()))
 }
 
-unsafe extern "C" fn my_ip_address_ex(_user_data: *mut c_void) -> *mut c_char {
+extern "C" fn my_ip_address_ex(_user_data: *mut c_void) -> *mut c_char {
     return_string(Some(natives::my_ip_address_ex()))
 }
 
