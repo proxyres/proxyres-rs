@@ -19,7 +19,7 @@ pub(crate) struct CfOwned(CFTypeRef);
 impl CfOwned {
     /// Takes ownership of an object returned by a create or copy function.
     pub(crate) fn new(object: CFTypeRef) -> Option<Self> {
-        (!object.is_null()).then_some(CfOwned(object))
+        (!object.is_null()).then(|| CfOwned(object))
     }
 
     pub(crate) fn as_ptr(&self) -> CFTypeRef {
@@ -180,5 +180,16 @@ pub(crate) unsafe fn cf_dictionary_strings(dictionary: CFDictionaryRef, key: CFS
                 cf_string_to_string(value as CFStringRef)
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn owned_null() {
+        // A null object is not wrapped, so it is never released
+        assert!(CfOwned::new(std::ptr::null()).is_none());
     }
 }
