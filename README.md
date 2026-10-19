@@ -7,11 +7,11 @@ Cross-platform proxy resolution for Rust with support for Linux, macOS, iOS, & W
 ## Features
 
 * Read the user's proxy configuration from the operating system.
-* Execute proxy auto-config (PAC) scripts with `JavaScriptCore`, `Windows Script Host`, or the [QuickJS](https://github.com/quickjs-ng/quickjs) engine, optionally bundled with the `quickjs` feature.
+* Execute proxy auto-config (PAC) scripts with `JavaScriptCore`, `Windows Script Host`, or the [QuickJS](https://github.com/quickjs-ng/quickjs) engine, bundled with the optional `quickjs` [feature flag](#feature-flags).
 * Resolve the proxies for a url asynchronously using `WinHTTP` on Windows and `CFNetwork` on macOS and iOS.
 * Or use the built-in resolver, which supports:
   * WPAD discovery using DHCP and DNS, which can start in the background at startup.
-  * Downloading PAC scripts using HTTP, or HTTPS using CFNetwork on macOS and iOS and the `https` feature elsewhere.
+  * Downloading PAC scripts using HTTP, or HTTPS using CFNetwork on macOS and iOS and the optional `https` [feature flag](#feature-flags) elsewhere.
 * Handle multiple simultaneous resolution requests with a thread pool.
 * C API compatible with the C library's headers.
 * Example command line utility, `proxycli`.
@@ -25,7 +25,7 @@ Cross-platform proxy resolution for Rust with support for Linux, macOS, iOS, & W
 |iOS|CFNetwork, HTTP proxy and PAC url only|CFNetwork|JavaScriptCore|
 |Linux|GNOME 3 GSettings, KDE kioslaverc, environment variables|Built-in|JavaScriptCoreGTK|
 
-Script engines are loaded at run-time, and the bundled QuickJS engine is used instead when the `quickjs` feature is enabled.
+Script engines are loaded at run-time, and the bundled QuickJS engine is used instead when the `quickjs` feature flag is enabled.
 
 ## Requirements
 
@@ -34,9 +34,9 @@ Script engines are loaded at run-time, and the bundled QuickJS engine is used in
 |Windows|Windows 10 or Windows Server 2016|32-bit and 64-bit, MSVC and GNU toolchains.|
 |macOS|macOS 10.12 on Intel, macOS 11 on Apple silicon||
 |iOS|iOS 10, iOS 14 in the simulator|Auto-discovery and bypass lists are not available.|
-|Linux|glibc 2.17, kernel 3.2|PAC scripts need JavaScriptCoreGTK 4.0, 4.1, or 6.0 from WebKitGTK 2.22 or later, unless the `quickjs` feature is enabled. GNOME settings need GLib 2.32 or later and `gsettings-desktop-schemas`.|
+|Linux|glibc 2.17, kernel 3.2|PAC scripts need JavaScriptCoreGTK 4.0, 4.1, or 6.0 from WebKitGTK 2.22 or later, unless the `quickjs` feature flag is enabled. GNOME settings need GLib 2.32 or later and `gsettings-desktop-schemas`.|
 
-Building requires Rust 1.85 or later, or Rust 1.87 with the `quickjs` feature. The C API crate also needs a C compiler.
+Building requires Rust 1.85 or later, or Rust 1.87 with the `quickjs` feature flag. The C API crate also needs a C compiler.
 
 CI runs on Windows Server 2025, macOS 26, the iOS simulator, and Ubuntu 22.04, 24.04, and 26.04.
 

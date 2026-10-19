@@ -1,4 +1,5 @@
-//! Download PAC scripts using HTTP, or HTTPS on macOS and iOS and with the `https` feature.
+//! Download PAC scripts using HTTP, or HTTPS on macOS and iOS and with the optional `https` cargo feature
+//! elsewhere.
 
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};

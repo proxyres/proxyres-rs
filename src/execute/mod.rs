@@ -96,7 +96,7 @@ fn url_host_for_script(url: &str) -> &str {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Engine {
-    /// The bundled QuickJS engine, available with the `quickjs` feature.
+    /// The bundled QuickJS engine, available with the optional `quickjs` cargo feature.
     QuickJs,
     /// JavaScriptCore loaded at run-time, available on macOS and on Linux with JavaScriptCoreGTK
     /// installed.
