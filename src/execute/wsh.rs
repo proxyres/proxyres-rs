@@ -420,3 +420,32 @@ pub(super) fn find_proxy_for_url(script: &str, url: &str, host: &str) -> Result<
     engine.parse_text(script)?;
     engine.find_proxy_for_url(url, host)
 }
+
+#[cfg(test)]
+mod tests {
+    use windows::Win32::Foundation::S_FALSE;
+    use windows::Win32::System::Com::COINIT_MULTITHREADED;
+
+    use super::*;
+
+    #[test]
+    fn keeps_caller_com_initialization() {
+        if !is_available() {
+            return;
+        }
+        std::thread::spawn(|| {
+            // SAFETY: Each successful initialization is balanced by an uninitialization.
+            unsafe {
+                assert!(CoInitializeEx(None, COINIT_MULTITHREADED).is_ok());
+                let script = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
+                assert_eq!(find_proxy_for_url(script, "http://a/", "a").as_deref(), Ok("DIRECT"));
+                // The caller's multithreaded apartment is still initialized
+                assert_eq!(CoInitializeEx(None, COINIT_MULTITHREADED), S_FALSE);
+                CoUninitialize();
+                CoUninitialize();
+            }
+        })
+        .join()
+        .unwrap();
+    }
+}

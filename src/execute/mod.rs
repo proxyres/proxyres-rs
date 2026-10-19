@@ -339,6 +339,30 @@ function FindProxyForURL(url, host) {
     }
 
     #[test]
+    fn concurrent_executions() {
+        // Executions on different threads keep their own native functions and results
+        for engine in engines() {
+            std::thread::scope(|scope| {
+                for i in 0..8 {
+                    scope.spawn(move || {
+                        let script = format!(
+                            r#"function FindProxyForURL(url, host) {{ return "PROXY t{i}-" + dnsResolve("127.0.0.1") + ":80"; }}"#
+                        );
+                        let expected = format!("PROXY t{i}-127.0.0.1:80");
+                        for _ in 0..10 {
+                            assert_eq!(
+                                get_proxies_for_url_with(engine, &script, "http://a/").as_deref(),
+                                Ok(expected.as_str()),
+                                "engine: {engine:?}"
+                            );
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    #[test]
     fn non_string_result() {
         let script = "function FindProxyForURL(url, host) { return undefined; }";
         for engine in engines() {

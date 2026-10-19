@@ -332,6 +332,7 @@ mod tests {
             ("PROXY 127.0.0.1:80", None, "http://127.0.0.1:80"),
             ("PROXY 127.0.0.1:8080", None, "http://127.0.0.1:8080"),
             ("PROXY 127.0.0.1:443", None, "https://127.0.0.1:443"),
+            ("PROXY 127.0.0.1:0443", None, "https://127.0.0.1:0443"),
             ("PROXY 127.0.0.1:1080", None, "socks://127.0.0.1:1080"),
             ("PROXY 127.0.0.1:21", None, "ftp://127.0.0.1:21"),
             ("PROXY myproxy0.com:90", Some("http"), "http://myproxy0.com:90"),
@@ -354,6 +355,7 @@ mod tests {
             // Empty entries and surrounding whitespace are ignored
             ("PROXY a:8080;", Some("http"), "http://a:8080"),
             ("PROXY a:8080; DIRECT ", Some("http"), "http://a:8080,direct://"),
+            ("DIRECT; ;PROXY a:8080", Some("http"), "direct://,http://a:8080"),
             ("", None, ""),
         ];
         for (proxy_list, default_scheme, expected) in tests {
@@ -418,6 +420,7 @@ mod tests {
             ("http://google.com/", Some("google.com,apple.com"), true),
             // Don't bypass due to no url matches
             ("http://google.com/", Some("apple.com"), false),
+            ("http://google.com/", Some("google.com*x"), false),
             // Bypass subdomains
             ("http://my.google.com/", Some(".google.com"), true),
             // Don't bypass if subdomain not supplied
@@ -432,6 +435,8 @@ mod tests {
             ("http://microsoft.com:88/", Some("microsoft.com"), true),
             // Bypass due to matching domain with explicit port
             ("http://microsoft.com:88/", Some("microsoft.com:88"), true),
+            // Bypass due to earlier matching rule despite later rule with different port
+            ("http://microsoft.com/", Some("microsoft.com,*.com:443"), true),
             // Bypass due to matching literal ip
             ("http://192.168.0.1/", Some("192.168.0.1"), true),
             ("http://192.168.0.1/", Some("192.168.0.1:80"), true),
@@ -475,5 +480,17 @@ mod tests {
         let bypass_list = vec!["abcdefgh.com"; 500].join(",");
         assert!(!should_bypass_proxy("http://x.org/", Some(&bypass_list)));
         assert!(should_bypass_proxy("http://abcdefgh.com/", Some(&bypass_list)));
+    }
+
+    #[test]
+    fn should_bypass_proxy_longest_rule() {
+        // Longest valid hostname with a five digit port
+        let domain = format!("{}.com", "b".repeat(247));
+        let host = format!("a.{domain}");
+        let url = format!("http://{host}:65535/");
+        assert!(should_bypass_proxy(&url, Some(&format!("{host}:65535"))));
+        assert!(should_bypass_proxy(&url, Some(&format!("apple.com,{host}:65535"))));
+        // Subdomain rule with the wildcard prefix
+        assert!(should_bypass_proxy(&url, Some(&format!(".{domain}:65535"))));
     }
 }

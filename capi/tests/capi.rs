@@ -150,17 +150,27 @@ fn execute() {
             Some("PROXY no-such-proxy:80")
         );
 
-        let bad_script = CString::new("function FindProxyForURL(url, host) {").unwrap();
-        assert!(!proxy_execute_get_proxies_for_url(
-            execute,
-            bad_script.as_ptr(),
-            url.as_ptr()
-        ));
-        assert_ne!(proxy_execute_get_error(execute), 0);
-        assert!(proxy_execute_get_list(execute).is_null());
+        let bad_scripts = [
+            "function FindProxyForURL(url, host) {",
+            // Thrown value that is not an Error
+            "function FindProxyForURL(url, host) { throw 42; }",
+            // Undefined function
+            "function FindProxyForURL(url, host) { return notDefined(host); }",
+        ];
+        for bad_script in bad_scripts {
+            let bad_script = CString::new(bad_script).unwrap();
+            assert!(!proxy_execute_get_proxies_for_url(
+                execute,
+                bad_script.as_ptr(),
+                url.as_ptr()
+            ));
+            assert_ne!(proxy_execute_get_error(execute), 0);
+            assert!(proxy_execute_get_list(execute).is_null());
+        }
 
         assert!(proxy_execute_delete(&mut execute));
         assert!(execute.is_null());
+        assert!(!proxy_execute_delete(&mut execute));
     }
 }
 

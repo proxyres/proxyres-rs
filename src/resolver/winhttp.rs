@@ -315,4 +315,22 @@ mod tests {
         };
         assert_eq!(convert_proxy_result(&result), "direct://");
     }
+
+    #[test]
+    fn convert_long_proxy_name() {
+        let name = "p".repeat(1000);
+        let (mut long, mut short) = (to_wide(&name), to_wide("short"));
+        let mut entries = [
+            entry(WINHTTP_INTERNET_SCHEME_HTTP, &mut long, 8080),
+            entry(WINHTTP_INTERNET_SCHEME_HTTP, &mut short, 80),
+        ];
+        let result = WINHTTP_PROXY_RESULT {
+            cEntries: entries.len() as u32,
+            pEntries: entries.as_mut_ptr(),
+        };
+        assert_eq!(
+            convert_proxy_result(&result),
+            format!("http://{name}:8080,http://short:80")
+        );
+    }
 }
